@@ -6,6 +6,9 @@ const model = ref([
     {
         label: 'Home',
         items: [
+            
+            
+    
             {
                 label: 'Dashboard',
                 icon: 'pi pi-fw pi-home',
@@ -13,6 +16,16 @@ const model = ref([
             }
         ]
     },
+    {
+            label: 'Administración',
+            items: [
+                {
+                    label: 'Usuarios',
+                    icon: 'pi pi-fw pi-users',
+                    to: '/usuarios'
+                }
+            ]
+        },
     {
         label: 'UI Components',
         path: '/uikit',
