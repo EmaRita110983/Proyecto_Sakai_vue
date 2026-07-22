@@ -17,7 +17,7 @@ import Select from 'primevue/select';
 
 const toast = useToast();
 const confirm = useConfirm();
-
+const errores = ref({});
 const visibleDialog = ref(false);
 const editando = ref(false);
 
@@ -75,7 +75,11 @@ const actualizarUsuario = async () => {
             password: ''
         };
     } catch (error) {
-        console.error(error);
+        if (error.response?.status === 422) {
+            errores.value = error.response.data.errors;
+        } else {
+            console.error(error);
+        }
     }
 };
 
@@ -101,13 +105,18 @@ const eliminarUsuario = (usuario) => {
                     life: 3000
                 });
             } catch (error) {
-                console.error(error);
+                if (error.response?.status === 422) {
+                    errores.value = error.response.data.errors;
+                } else {
+                    console.error(error);
+                }
             }
         }
     });
 };
 
 const editarUsuario = (usuarioSeleccionado) => {
+    errores.value = {};
     editando.value = true;
 
     usuario.value = {
@@ -123,6 +132,7 @@ const editarUsuario = (usuarioSeleccionado) => {
 };
 
 const nuevoUsuario = () => {
+    errores.value = {};
     editando.value = false;
 
     usuario.value = {
@@ -162,13 +172,33 @@ const guardarUsuario = async () => {
             cedula: ''
         };
     } catch (error) {
-        console.log(error);
+    console.error(error);
 
-        if (error.response) {
-            console.log('STATUS:', error.response.status);
+    if (error.response?.status === 422) {
+        errores.value = error.response.data.errors;
 
-            console.log('DATA:', error.response.data);
-        }
+        toast.add({
+            severity: 'warn',
+            summary: 'Datos inválidos',
+            detail: error.response.data.message,
+            life: 3000
+        });
+
+        console.log(error.response.data);
+    } else {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Ocurrió un error inesperado',
+            life: 3000
+        });
+    }
+}
+
+    if (error.response) {
+        console.log('STATUS:', error.response.status);
+
+        console.log('DATA:', error.response.data);
     }
 };
 
@@ -242,24 +272,36 @@ onMounted(async () => {
                     <label for="name">Nombre</label>
                 </FloatLabel>
 
+                <small v-if="errores.name" class="text-red-500">
+                    {{ errores.name[0] }}
+                </small>
+
                 <FloatLabel>
                     <InputText id="email" v-model="usuario.email" />
                     <label for="email">Email</label>
                 </FloatLabel>
+                <small v-if="errores.email" class="text-red-500">
+                    {{ errores.email[0] }}
+                </small>
 
                 <FloatLabel>
                     <InputText id="cedula" v-model="usuario.cedula" />
                     <label for="cedula">Cédula</label>
                 </FloatLabel>
+                <small v-if="errores.cedula" class="text-red-500">
+                    {{ errores.cedula[0] }}
+                </small>
                 <FloatLabel>
                     <Select id="role" v-model="usuario.role" :options="roles" optionLabel="name" optionValue="value" class="w-full" />
-
                     <label for="role"> Rol </label>
                 </FloatLabel>
                 <FloatLabel>
                     <InputText id="password" v-model="usuario.password" />
                     <label for="password">Password</label>
                 </FloatLabel>
+                <small v-if="errores.password" class="text-red-500">
+                    {{ errores.password[0] }}
+                </small>
             </div>
 
             <template #footer>

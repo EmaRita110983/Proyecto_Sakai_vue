@@ -1,5 +1,6 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
+import { hasRole } from '@/service/auth.service';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -7,11 +8,17 @@ const router = createRouter({
         {
             path: '/',
             component: AppLayout,
+            meta: {
+                requiresAuth: true
+            },
             children: [
                 {
                     path: '/usuarios',
                     name: 'usuarios',
-                    component: () => import('@/views/usuarios/Usuarios.vue')
+                    component: () => import('@/views/usuarios/Usuarios.vue'),
+                    meta: {
+                        roles: ['superadmin', 'admin']
+                    }
                 },
                 {
                     path: '/',
@@ -144,8 +151,46 @@ const router = createRouter({
             path: '/auth/error',
             name: 'error',
             component: () => import('@/views/pages/auth/Error.vue')
+        },
+        {
+            path: '/:pathMatch(.*)*',
+            redirect: '/pages/notfound'
         }
     ]
+});
+
+router.beforeEach((to, from, next) => {
+
+    const token = localStorage.getItem('token');
+
+
+    if (to.meta.requiresAuth && !token) {
+        next('/auth/login');
+        return;
+    }
+
+
+    if (to.path === '/auth/login' && token) {
+        next('/');
+        return;
+    }
+
+
+    if (to.meta.roles) {
+
+        const permitido = to.meta.roles.some(role => hasRole(role));
+
+
+        if (!permitido) {
+            next('/auth/access');
+            return;
+        }
+
+    }
+
+
+    next();
+
 });
 
 export default router;

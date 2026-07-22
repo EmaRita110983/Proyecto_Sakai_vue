@@ -1,8 +1,39 @@
 <script setup>
+
+console.log('AppTopbar cargado');
+
 import { useLayout } from '@/layout/composables/layout';
 import AppConfigurator from './AppConfigurator.vue';
+import { useAuth } from '@/composables/useAuth';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
+const { usuario, cargarUsuario } = useAuth();
+
+const cargar = async () => {
+    await cargarUsuario();
+
+    setTimeout(() => {
+        console.log('Usuario actual:', usuario.value);
+    }, 1000);
+};
+
+cargar();
+
+cargar();
+
+const logout = async () => {
+    try {
+        await api.post('/v1/auth/logout');
+    } catch (error) {
+        console.log(error);
+    } finally {
+        localStorage.removeItem('token');
+        router.push('/auth/login');
+    }
+};
 </script>
 
 <template>
@@ -68,9 +99,9 @@ const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
                         <i class="pi pi-inbox"></i>
                         <span>Messages</span>
                     </button>
-                    <button type="button" class="layout-topbar-action">
-                        <i class="pi pi-user"></i>
-                        <span>Profile</span>
+                    <button type="button" class="layout-topbar-action" @click="logout">
+                        <i class="pi pi-sign-out"></i>
+                        <span>Cerrar sesión</span>
                     </button>
                 </div>
             </div>

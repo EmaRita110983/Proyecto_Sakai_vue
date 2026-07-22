@@ -1,5 +1,6 @@
 import api from './api';
 
+
 export async function funLogin(email, password) {
 
     const response = await api.post('/v1/auth/login', {
@@ -24,4 +25,37 @@ export async function funLogout() {
     const response = await api.post('/v1/auth/logout');
 
     return response.data;
+}
+
+
+// ============================
+// Funciones de autorización
+// ============================
+
+export function getUser() {
+
+    const user = localStorage.getItem('user');
+
+    return user ? JSON.parse(user) : null;
+
+}
+
+
+export function hasRole(role) {
+
+    const user = getUser();
+
+    if (!user) {
+        return false;
+    }
+
+    return user.role === role;
+
+}
+
+
+export function isAuthenticated() {
+
+    return !!localStorage.getItem('token');
+
 }
