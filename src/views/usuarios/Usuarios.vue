@@ -132,6 +132,7 @@ const editarUsuario = (usuarioSeleccionado) => {
 };
 
 const nuevoUsuario = () => {
+    console.log('BOTON NUEVO USUARIO FUNCIONA');
     errores.value = {};
     editando.value = false;
 
@@ -172,33 +173,27 @@ const guardarUsuario = async () => {
             cedula: ''
         };
     } catch (error) {
-    console.error(error);
+        console.error(error);
 
-    if (error.response?.status === 422) {
-        errores.value = error.response.data.errors;
+        if (error.response?.status === 422) {
+            errores.value = error.response.data.errors;
 
-        toast.add({
-            severity: 'warn',
-            summary: 'Datos inválidos',
-            detail: error.response.data.message,
-            life: 3000
-        });
+            toast.add({
+                severity: 'warn',
+                summary: 'Datos inválidos',
+                detail: error.response.data.message,
+                life: 3000
+            });
 
-        console.log(error.response.data);
-    } else {
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Ocurrió un error inesperado',
-            life: 3000
-        });
-    }
-}
-
-    if (error.response) {
-        console.log('STATUS:', error.response.status);
-
-        console.log('DATA:', error.response.data);
+            console.log(error.response.data);
+        } else {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Ocurrió un error inesperado',
+                life: 3000
+            });
+        }
     }
 };
 
@@ -221,8 +216,16 @@ const roles = ref([
 onMounted(async () => {
     try {
         usuarios.value = await funListar();
+
+        console.log('RESPUESTA USUARIOS:', usuarios.value);
     } catch (error) {
         console.error(error);
+
+        if (error.response) {
+            console.log('STATUS:', error.response.status);
+            console.log('DATA:', error.response.data);
+            console.log('HEADERS:', error.response.headers);
+        }
     }
 });
 </script>
@@ -240,7 +243,7 @@ onMounted(async () => {
             </template>
 
             <template #end>
-                <Button label="Nuevo Usuario" icon="pi pi-user-plus" @click="nuevoUsuario" />
+                <Button label="Nuevo Usuario" icon="pi pi-user-plus" @click="nuevoUsuario()" />
             </template>
         </Toolbar>
 
@@ -265,7 +268,7 @@ onMounted(async () => {
             </Column>
         </DataTable>
 
-        <Dialog v-model:visible="visibleDialog" header="editando ? 'Editar Usuario' : 'Nuevo Usuario'" :modal="true" :style="{ width: '450px' }">
+        <Dialog v-model:visible="visibleDialog" :header="editando ? 'Editar Usuario' : 'Nuevo Usuario'" :modal="true" :style="{ width: '450px' }">
             <div class="flex flex-column gap-3">
                 <FloatLabel>
                     <InputText id="name" v-model="usuario.name" />

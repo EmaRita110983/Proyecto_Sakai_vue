@@ -1,14 +1,12 @@
 <script setup>
 import { ref } from 'vue';
 import AppMenuItem from './AppMenuItem.vue';
+import { hasRole } from '@/service/auth.service';
 
 const model = ref([
     {
         label: 'Home',
         items: [
-            
-            
-    
             {
                 label: 'Dashboard',
                 icon: 'pi pi-fw pi-home',
@@ -16,16 +14,20 @@ const model = ref([
             }
         ]
     },
+
     {
-            label: 'Administración',
-            items: [
-                {
-                    label: 'Usuarios',
-                    icon: 'pi pi-fw pi-users',
-                    to: '/usuarios'
-                }
-            ]
-        },
+        label: 'Administración',
+        visible: hasRole('superadmin') || hasRole('admin'),
+        items: [
+            {
+                label: 'Usuarios',
+                icon: 'pi pi-fw pi-users',
+                to: '/usuarios',
+                visible: hasRole('superadmin') || hasRole('admin')
+            }
+        ]
+    },
+
     {
         label: 'UI Components',
         path: '/uikit',
