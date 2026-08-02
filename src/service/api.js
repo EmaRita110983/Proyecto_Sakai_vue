@@ -3,15 +3,14 @@ import axios from 'axios';
 const api = axios.create({
     baseURL: 'http://127.0.0.1:8000/api',
     headers: {
-        Accept: 'application/json'
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
     }
 });
-
 
 // Interceptor para enviar automáticamente el token de Laravel Sanctum
 api.interceptors.request.use(
     (config) => {
-
         const token = localStorage.getItem('token');
 
         if (token) {
@@ -30,7 +29,6 @@ api.interceptors.response.use(
         return response;
     },
     (error) => {
-
         if (error.response && error.response.status === 401) {
             localStorage.removeItem('token');
 
@@ -40,6 +38,5 @@ api.interceptors.response.use(
         return Promise.reject(error);
     }
 );
-
 
 export default api;

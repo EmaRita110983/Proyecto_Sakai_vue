@@ -6,6 +6,7 @@ import { useLayout } from '@/layout/composables/layout';
 import AppConfigurator from './AppConfigurator.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useRouter } from 'vue-router';
+import api from '@/service/api';
 
 const router = useRouter();
 
@@ -22,8 +23,6 @@ const cargar = async () => {
 
 cargar();
 
-cargar();
-
 const logout = async () => {
     try {
         await api.post('/v1/auth/logout');
@@ -31,6 +30,7 @@ const logout = async () => {
         console.log(error);
     } finally {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         router.push('/auth/login');
     }
 };

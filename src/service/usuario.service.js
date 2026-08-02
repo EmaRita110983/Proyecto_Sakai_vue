@@ -22,22 +22,21 @@ export async function funGuardar(usuario) {
 }
 
 
-export async function funEliminar(id) {
+export async function funModificar(id, usuario) {
 
-    const response = await api.delete(
-        `/v1/users/${id}`
+    const response = await api.put(
+        `/v1/users/${id}`,
+        usuario
     );
 
     return response.data;
 
 }
 
-
-export async function funModificar(id, usuario) {
+export async function funCambiarEstado(id) {
 
     const response = await api.put(
-        `/v1/users/${id}`,
-        usuario
+        `/v1/users/${id}/status`
     );
 
     return response.data;

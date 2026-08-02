@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue';
-import { funListar, funGuardar, funEliminar, funModificar } from '@/service/usuario.service';
+import { funListar, funGuardar, funModificar, funCambiarEstado } from '@/service/usuario.service';
 import Toast from 'primevue/toast';
 import Toolbar from 'primevue/toolbar';
 import Button from 'primevue/button';
@@ -14,6 +14,7 @@ import { useToast } from 'primevue/usetoast';
 import ConfirmDialog from 'primevue/confirmdialog';
 import { useConfirm } from 'primevue/useconfirm';
 import Select from 'primevue/select';
+import { funListarPacientes } from '@/service/patient.service';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -22,6 +23,15 @@ const visibleDialog = ref(false);
 const editando = ref(false);
 
 const usuarios = ref([]);
+const usuarioActual = JSON.parse(localStorage.getItem('user'));
+
+const probarPacientes = async () => {
+    const data = await funListarPacientes();
+
+    console.log(data);
+};
+
+probarPacientes();
 
 const usuario = ref({
     id: null,
@@ -83,25 +93,24 @@ const actualizarUsuario = async () => {
     }
 };
 
-const eliminarUsuario = (usuario) => {
+const desactivarUsuario = (usuario) => {
     confirm.require({
-        message: `¿Desea eliminar al usuario ${usuario.name}?`,
-        header: 'Confirmar eliminación',
-        icon: 'pi pi-exclamation-triangle',
+        message: `¿Desea desactivar al usuario ${usuario.name}?`,
+        header: 'Confirmar desactivación',
 
-        acceptLabel: 'Eliminar',
+        acceptLabel: 'Desactivar',
         rejectLabel: 'Cancelar',
 
         accept: async () => {
             try {
-                await funEliminar(usuario.id);
+                await funCambiarEstado(usuario.id);
 
                 usuarios.value = await funListar();
 
                 toast.add({
                     severity: 'success',
-                    summary: 'Usuario eliminado',
-                    detail: 'El usuario fue eliminado correctamente',
+                    summary: 'Usuario desactivado',
+                    detail: 'El usuario fue desactivado correctamente',
                     life: 3000
                 });
             } catch (error) {
@@ -113,6 +122,23 @@ const eliminarUsuario = (usuario) => {
             }
         }
     });
+};
+
+const activarUsuario = async (usuario) => {
+    try {
+        await funCambiarEstado(usuario.id);
+
+        usuarios.value = await funListar();
+
+        toast.add({
+            severity: 'success',
+            summary: 'Usuario activado',
+            detail: 'El usuario fue activado correctamente',
+            life: 3000
+        });
+    } catch (error) {
+        console.error(error);
+    }
 };
 
 const editarUsuario = (usuarioSeleccionado) => {
@@ -197,25 +223,40 @@ const guardarUsuario = async () => {
     }
 };
 
-const roles = ref([
-    {
-        name: 'Super Administrador',
-        value: 'superadmin'
-    },
-    {
-        name: 'Administrador',
-        value: 'admin'
-    },
-    {
-        name: 'Secretaria',
-        value: 'secretaria'
-    }
-]);
+const roles = ref(
+    usuarioActual
+        ? [
+              {
+                  name: 'Super Administrador',
+                  value: 'superadmin'
+              },
+              {
+                  name: 'Administrador',
+                  value: 'admin'
+              },
+              {
+                  name: 'Secretaria',
+                  value: 'secretaria'
+              }
+          ]
+        : [
+              {
+                  name: 'Secretaria',
+                  value: 'secretaria'
+              }
+          ]
+);
 
 // Aquí queda tu onMounted
 onMounted(async () => {
     try {
         usuarios.value = await funListar();
+        console.log('ANTES DE LLAMAR PACIENTES');
+
+        const pacientes = await funListarPacientes();
+
+        console.log('DESPUÉS DE LLAMAR PACIENTES');
+        console.log('PACIENTES:', pacientes);
 
         console.log('RESPUESTA USUARIOS:', usuarios.value);
     } catch (error) {
@@ -227,6 +268,7 @@ onMounted(async () => {
             console.log('HEADERS:', error.response.headers);
         }
     }
+    console.log('PACIENTES:', pacientes);
 });
 </script>
 
@@ -260,12 +302,22 @@ onMounted(async () => {
             <Column field="email" header="Email"></Column>
             <Column field="cedula" header="Cédula"></Column>
             <Column field="role" header="Rol"></Column>
-            <Column header="Acciones">
+            <Column header="Estado">
                 <template #body="slotProps">
-                    <Button icon="pi pi-pencil" severity="info" rounded class="mr-2" @click="editarUsuario(slotProps.data)" />
-                    <Button icon="pi pi-trash" severity="danger" rounded @click="eliminarUsuario(slotProps.data)" />
+                    <span v-if="slotProps.data.status">Activo</span>
+                    <span v-else>Inactivo</span>
                 </template>
             </Column>
+            <Column header="Acciones">
+    <template #body="slotProps">
+        <div class="flex gap-2">
+            <Button icon="pi pi-pencil" severity="info" rounded @click="editarUsuario(slotProps.data)" />
+            <Button v-if="slotProps.data.status" icon="pi pi-ban" severity="danger" rounded @click="desactivarUsuario(slotProps.data)" />
+            <Button v-else icon="pi pi-check" severity="success" rounded @click="activarUsuario(slotProps.data)" />
+        </div>
+    </template>
+</Column>
+
         </DataTable>
 
         <Dialog v-model:visible="visibleDialog" :header="editando ? 'Editar Usuario' : 'Nuevo Usuario'" :modal="true" :style="{ width: '450px' }">

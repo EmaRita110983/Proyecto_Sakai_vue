@@ -15,6 +15,8 @@ const login = async () => {
     try {
         const response = await funLogin(email.value, password.value);
 
+        console.log('TOKEN RECIBIDO:', response.token);
+
         localStorage.setItem('token', response.token);
 
         const perfil = await funPerfil();
@@ -22,7 +24,6 @@ const login = async () => {
         localStorage.setItem('user', JSON.stringify(perfil));
 
         router.push('/');
-
     } catch (error) {
         console.error(error);
     }

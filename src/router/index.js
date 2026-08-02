@@ -21,9 +21,22 @@ const router = createRouter({
                     }
                 },
                 {
+                    path: '/pacientes',
+                    name: 'pacientes',
+                    component: () => import('@/views/pacientes/Pacientes.vue'),
+                    meta: {
+                        roles: ['admin', 'secretaria']
+                    }
+                },
+                {
                     path: '/',
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
+                },
+                {
+                    path: '/perfil',
+                    name: 'perfil',
+                    component: () => import('@/views/Profile.vue')
                 },
                 {
                     path: '/uikit/formlayout',
@@ -160,37 +173,28 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
-
     const token = localStorage.getItem('token');
-
 
     if (to.meta.requiresAuth && !token) {
         next('/auth/login');
         return;
     }
 
-
     if (to.path === '/auth/login' && token) {
         next('/');
         return;
     }
 
-
     if (to.meta.roles) {
-
-        const permitido = to.meta.roles.some(role => hasRole(role));
-
+        const permitido = to.meta.roles.some((role) => hasRole(role));
 
         if (!permitido) {
             next('/auth/access');
             return;
         }
-
     }
 
-
     next();
-
 });
 
 export default router;

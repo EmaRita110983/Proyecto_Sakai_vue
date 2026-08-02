@@ -17,13 +17,19 @@ const model = ref([
 
     {
         label: 'Administración',
-        visible: hasRole('superadmin') || hasRole('admin'),
+        visible: hasRole('superadmin') || hasRole('admin') || hasRole('secretaria'),
         items: [
             {
                 label: 'Usuarios',
                 icon: 'pi pi-fw pi-users',
                 to: '/usuarios',
                 visible: hasRole('superadmin') || hasRole('admin')
+            },
+            {
+                label: 'Pacientes',
+                icon: 'pi pi-fw pi-id-card',
+                to: '/pacientes',
+                visible: hasRole('admin') || hasRole('secretaria')
             }
         ]
     },
