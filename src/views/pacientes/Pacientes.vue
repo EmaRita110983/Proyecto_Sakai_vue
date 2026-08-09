@@ -1,6 +1,8 @@
 <script setup>
 import { onMounted, ref } from 'vue';
-import { funListarPacientes, funGuardarPaciente, funActualizarPaciente } from '@/service/patient.service';
+import { useRouter } from 'vue-router';
+import { funListarPacientes, funGuardarPaciente, funActualizarPaciente, funEliminarPaciente } from '@/service/patient.service';
+import { getUser } from '@/service/auth.service';
 import Toast from 'primevue/toast';
 import Toolbar from 'primevue/toolbar';
 import Button from 'primevue/button';
@@ -15,11 +17,21 @@ import DatePicker from 'primevue/datepicker';
 import Textarea from 'primevue/textarea';
 import { FilterMatchMode } from '@primevue/core/api';
 import { useToast } from 'primevue/usetoast';
+import ConfirmDialog from 'primevue/confirmdialog';
+import { useConfirm } from 'primevue/useconfirm';
 
 const toast = useToast();
+const confirm = useConfirm();
+const router = useRouter();
 const errores = ref({});
 const visibleDialog = ref(false);
 const editando = ref(false);
+
+// Solo el médico (admin) puede eliminar pacientes; la secretaria crea y edita, no borra.
+const esMedico = getUser()?.role === 'admin';
+
+// Historial médico y recetas: solo médico y superadmin, la secretaria no accede.
+const puedeVerHistorial = ['admin', 'superadmin'].includes(getUser()?.role);
 
 const pacientes = ref([]);
 
@@ -27,6 +39,7 @@ const pacienteVacio = {
     first_name: '',
     last_name: '',
     cedula: '',
+    pasaporte: '',
     birth_date: null,
     phone: '',
     email: '',
@@ -67,6 +80,7 @@ const editarPaciente = (pacienteSeleccionado) => {
         first_name: pacienteSeleccionado.first_name,
         last_name: pacienteSeleccionado.last_name,
         cedula: pacienteSeleccionado.cedula,
+        pasaporte: pacienteSeleccionado.pasaporte,
         birth_date: parsearFecha(pacienteSeleccionado.birth_date),
         phone: pacienteSeleccionado.phone,
         email: pacienteSeleccionado.email,
@@ -144,7 +158,39 @@ const guardarPaciente = async () => {
     }
 };
 
-// Ya no falta nada: PatientController::update() ya está implementado.
+const eliminarPaciente = (pacienteSeleccionado) => {
+    confirm.require({
+        message: `¿Desea eliminar al paciente ${pacienteSeleccionado.first_name} ${pacienteSeleccionado.last_name}?`,
+        header: 'Confirmar eliminación',
+        acceptLabel: 'Eliminar',
+        rejectLabel: 'Cancelar',
+        acceptClass: 'p-button-danger',
+
+        accept: async () => {
+            try {
+                await funEliminarPaciente(pacienteSeleccionado.id);
+
+                pacientes.value = await funListarPacientes();
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Paciente eliminado',
+                    detail: 'El paciente fue eliminado correctamente',
+                    life: 3000
+                });
+            } catch (error) {
+                console.error(error);
+
+                toast.add({
+                    severity: 'error',
+                    summary: 'No autorizado',
+                    detail: error.response?.data?.message ?? 'Ocurrió un error inesperado',
+                    life: 3000
+                });
+            }
+        }
+    });
+};
 
 onMounted(async () => {
     try {
@@ -157,6 +203,7 @@ onMounted(async () => {
 
 <template>
     <div class="card">
+        <ConfirmDialog />
         <Toast />
         <Toolbar class="mb-4">
             <template #start>
@@ -171,19 +218,18 @@ onMounted(async () => {
             </template>
         </Toolbar>
 
-        <div class="flex justify-content-end mb-4">
+        <div class="flex justify-end mb-4">
             <IconField>
                 <InputIcon class="pi pi-search" />
-                <InputText v-model="filters.global.value" placeholder="Buscar paciente..." />
+                <InputText v-model="filters.global.value" placeholder="Buscar por cédula o pasaporte..." autocomplete="off" />
             </IconField>
         </div>
 
         <DataTable
             :value="pacientes"
             v-model:filters="filters"
-            :filters="filters"
             filterDisplay="menu"
-            :globalFilterFields="['first_name', 'last_name', 'cedula', 'phone', 'email']"
+            :globalFilterFields="['cedula', 'pasaporte']"
             paginator
             :rows="10"
             stripedRows
@@ -194,12 +240,15 @@ onMounted(async () => {
             <Column field="first_name" header="Nombre"></Column>
             <Column field="last_name" header="Apellido"></Column>
             <Column field="cedula" header="Cédula"></Column>
+            <Column field="pasaporte" header="Pasaporte"></Column>
             <Column field="phone" header="Teléfono"></Column>
             <Column field="email" header="Email"></Column>
             <Column header="Acciones">
                 <template #body="slotProps">
                     <div class="flex gap-2">
+                        <Button v-if="puedeVerHistorial" icon="pi pi-book" severity="secondary" rounded @click="router.push(`/pacientes/${slotProps.data.id}/historial`)" />
                         <Button icon="pi pi-pencil" severity="info" rounded @click="editarPaciente(slotProps.data)" />
+                        <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded @click="eliminarPaciente(slotProps.data)" />
                     </div>
                 </template>
             </Column>
@@ -207,7 +256,7 @@ onMounted(async () => {
 
         <Dialog v-model:visible="visibleDialog" :header="editando ? 'Editar Paciente' : 'Nuevo Paciente'" :modal="true" :style="{ width: '700px' }" :breakpoints="{ '960px': '90vw' }">
             <div class="grid grid-cols-2 gap-4 pt-2">
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="first_name" v-model="paciente.first_name" class="w-full" />
                         <label for="first_name">Nombre</label>
@@ -215,7 +264,7 @@ onMounted(async () => {
                     <small v-if="errores.first_name" class="text-red-500">{{ errores.first_name[0] }}</small>
                 </div>
 
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="last_name" v-model="paciente.last_name" class="w-full" />
                         <label for="last_name">Apellido</label>
@@ -223,7 +272,7 @@ onMounted(async () => {
                     <small v-if="errores.last_name" class="text-red-500">{{ errores.last_name[0] }}</small>
                 </div>
 
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="cedula" v-model="paciente.cedula" class="w-full" />
                         <label for="cedula">Cédula</label>
@@ -231,7 +280,15 @@ onMounted(async () => {
                     <small v-if="errores.cedula" class="text-red-500">{{ errores.cedula[0] }}</small>
                 </div>
 
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="pasaporte" v-model="paciente.pasaporte" class="w-full" />
+                        <label for="pasaporte">Pasaporte (si es extranjero)</label>
+                    </FloatLabel>
+                    <small v-if="errores.pasaporte" class="text-red-500">{{ errores.pasaporte[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <DatePicker id="birth_date" v-model="paciente.birth_date" class="w-full" dateFormat="dd/mm/yy" showIcon iconDisplay="input" />
                         <label for="birth_date">Fecha de nacimiento</label>
@@ -239,7 +296,7 @@ onMounted(async () => {
                     <small v-if="errores.birth_date" class="text-red-500">{{ errores.birth_date[0] }}</small>
                 </div>
 
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="phone" v-model="paciente.phone" class="w-full" />
                         <label for="phone">Teléfono</label>
@@ -247,7 +304,7 @@ onMounted(async () => {
                     <small v-if="errores.phone" class="text-red-500">{{ errores.phone[0] }}</small>
                 </div>
 
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="email" v-model="paciente.email" class="w-full" />
                         <label for="email">Email</label>
@@ -255,35 +312,35 @@ onMounted(async () => {
                     <small v-if="errores.email" class="text-red-500">{{ errores.email[0] }}</small>
                 </div>
 
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="insurance" v-model="paciente.insurance" class="w-full" />
                         <label for="insurance">Seguro médico</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-column gap-2">
+                <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="emergency_contact" v-model="paciente.emergency_contact" class="w-full" />
                         <label for="emergency_contact">Contacto de emergencia</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-column gap-2 col-span-2">
+                <div class="flex flex-col gap-2 col-span-2">
                     <FloatLabel class="w-full">
                         <InputText id="emergency_phone" v-model="paciente.emergency_phone" class="w-full" />
                         <label for="emergency_phone">Teléfono de emergencia</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-column gap-2 col-span-2">
+                <div class="flex flex-col gap-2 col-span-2">
                     <FloatLabel class="w-full">
                         <Textarea id="address" v-model="paciente.address" class="w-full" rows="2" autoResize />
                         <label for="address">Dirección</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-column gap-2 col-span-2">
+                <div class="flex flex-col gap-2 col-span-2">
                     <FloatLabel class="w-full">
                         <Textarea id="medical_conditions" v-model="paciente.medical_conditions" class="w-full" rows="3" autoResize />
                         <label for="medical_conditions">Condiciones médicas</label>

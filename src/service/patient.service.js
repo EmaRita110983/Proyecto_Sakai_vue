@@ -10,6 +10,15 @@ export async function funListarPacientes() {
 }
 
 
+export async function funObtenerPaciente(id) {
+
+    const response = await api.get(`/v1/patients/${id}`);
+
+    return response.data;
+
+}
+
+
 export async function funGuardarPaciente(paciente) {
 
     const response = await api.post(
@@ -28,6 +37,15 @@ export async function funActualizarPaciente(id, paciente) {
         `/v1/patients/${id}`,
         paciente
     );
+
+    return response.data;
+
+}
+
+
+export async function funEliminarPaciente(id) {
+
+    const response = await api.delete(`/v1/patients/${id}`);
 
     return response.data;
 

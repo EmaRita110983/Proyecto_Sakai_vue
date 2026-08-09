@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { funListar, funGuardar, funModificar, funCambiarEstado } from '@/service/usuario.service';
 import Toast from 'primevue/toast';
 import Toolbar from 'primevue/toolbar';
@@ -14,7 +14,6 @@ import { useToast } from 'primevue/usetoast';
 import ConfirmDialog from 'primevue/confirmdialog';
 import { useConfirm } from 'primevue/useconfirm';
 import Select from 'primevue/select';
-import { funListarPacientes } from '@/service/patient.service';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -24,14 +23,7 @@ const editando = ref(false);
 
 const usuarios = ref([]);
 const usuarioActual = JSON.parse(localStorage.getItem('user'));
-
-const probarPacientes = async () => {
-    const data = await funListarPacientes();
-
-    console.log(data);
-};
-
-probarPacientes();
+const esSuperAdmin = usuarioActual?.role === 'superadmin';
 
 const usuario = ref({
     id: null,
@@ -39,8 +31,15 @@ const usuario = ref({
     email: '',
     cedula: '',
     password: '',
-    role: ''
+    role: '',
+    admin_id: null
 });
+
+// Médicos disponibles para asignar como tenant de una nueva secretaria
+// (solo el superadmin necesita elegir esto; el admin siempre crea para sí mismo).
+const medicos = computed(() => usuarios.value.filter((u) => u.role === 'admin').map((u) => ({ name: u.name, value: u.id })));
+
+const mostrarSelectorMedico = computed(() => !editando.value && esSuperAdmin && usuario.value.role === 'secretaria');
 
 const filters = ref({
     global: {
@@ -158,7 +157,6 @@ const editarUsuario = (usuarioSeleccionado) => {
 };
 
 const nuevoUsuario = () => {
-    console.log('BOTON NUEVO USUARIO FUNCIONA');
     errores.value = {};
     editando.value = false;
 
@@ -168,7 +166,8 @@ const nuevoUsuario = () => {
         email: '',
         cedula: '',
         password: '',
-        role: 'secretaria'
+        role: 'secretaria',
+        admin_id: null
     };
 
     visibleDialog.value = true;
@@ -176,8 +175,6 @@ const nuevoUsuario = () => {
 
 // Función para guardar usuario
 const guardarUsuario = async () => {
-    console.log('Datos enviados:', usuario.value);
-
     try {
         await funGuardar(usuario.value);
 
@@ -193,10 +190,13 @@ const guardarUsuario = async () => {
         usuarios.value = await funListar();
 
         usuario.value = {
+            id: null,
             name: '',
             email: '',
+            cedula: '',
             password: '',
-            cedula: ''
+            role: '',
+            admin_id: null
         };
     } catch (error) {
         console.error(error);
@@ -223,8 +223,9 @@ const guardarUsuario = async () => {
     }
 };
 
+// El admin (médico) solo puede crear/asignar secretarias; superadmin ve las 3 opciones.
 const roles = ref(
-    usuarioActual
+    esSuperAdmin
         ? [
               {
                   name: 'Super Administrador',
@@ -247,28 +248,12 @@ const roles = ref(
           ]
 );
 
-// Aquí queda tu onMounted
 onMounted(async () => {
     try {
         usuarios.value = await funListar();
-        console.log('ANTES DE LLAMAR PACIENTES');
-
-        const pacientes = await funListarPacientes();
-
-        console.log('DESPUÉS DE LLAMAR PACIENTES');
-        console.log('PACIENTES:', pacientes);
-
-        console.log('RESPUESTA USUARIOS:', usuarios.value);
     } catch (error) {
         console.error(error);
-
-        if (error.response) {
-            console.log('STATUS:', error.response.status);
-            console.log('DATA:', error.response.data);
-            console.log('HEADERS:', error.response.headers);
-        }
     }
-    console.log('PACIENTES:', pacientes);
 });
 </script>
 
@@ -289,14 +274,14 @@ onMounted(async () => {
             </template>
         </Toolbar>
 
-        <div class="flex justify-content-end mb-4">
+        <div class="flex justify-end mb-4">
             <IconField>
                 <InputIcon class="pi pi-search" />
-                <InputText v-model="filters.global.value" placeholder="Buscar usuario..." />
+                <InputText v-model="filters.global.value" placeholder="Buscar por cédula..." autocomplete="off" />
             </IconField>
         </div>
 
-        <DataTable :value="usuarios" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['name', 'email', 'cedula', 'role']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll">
+        <DataTable :value="usuarios" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll">
             <Column field="id" header="ID"></Column>
             <Column field="name" header="Nombre"></Column>
             <Column field="email" header="Email"></Column>
@@ -321,7 +306,7 @@ onMounted(async () => {
         </DataTable>
 
         <Dialog v-model:visible="visibleDialog" :header="editando ? 'Editar Usuario' : 'Nuevo Usuario'" :modal="true" :style="{ width: '450px' }">
-            <div class="flex flex-column gap-3">
+            <div class="flex flex-col gap-3">
                 <FloatLabel>
                     <InputText id="name" v-model="usuario.name" />
                     <label for="name">Nombre</label>
@@ -350,6 +335,15 @@ onMounted(async () => {
                     <Select id="role" v-model="usuario.role" :options="roles" optionLabel="name" optionValue="value" class="w-full" />
                     <label for="role"> Rol </label>
                 </FloatLabel>
+
+                <template v-if="mostrarSelectorMedico">
+                    <FloatLabel>
+                        <Select id="admin_id" v-model="usuario.admin_id" :options="medicos" optionLabel="name" optionValue="value" class="w-full" />
+                        <label for="admin_id">Médico al que pertenece</label>
+                    </FloatLabel>
+                    <small v-if="errores.admin_id" class="text-red-500">{{ errores.admin_id[0] }}</small>
+                </template>
+
                 <FloatLabel>
                     <InputText id="password" v-model="usuario.password" />
                     <label for="password">Password</label>

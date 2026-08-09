@@ -1,22 +1,441 @@
 <script setup>
-import BestSellingWidget from '@/components/dashboard/BestSellingWidget.vue';
-import NotificationsWidget from '@/components/dashboard/NotificationsWidget.vue';
-import RecentSalesWidget from '@/components/dashboard/RecentSalesWidget.vue';
-import RevenueStreamWidget from '@/components/dashboard/RevenueStreamWidget.vue';
-import StatsWidget from '@/components/dashboard/StatsWidget.vue';
+import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { getUser } from '@/service/auth.service';
+import { funListarPacientes, funGuardarPaciente } from '@/service/patient.service';
+import { funListar } from '@/service/usuario.service';
+import { funListarCitas, funGuardarCita, funActualizarCita } from '@/service/cita.service';
+import { useToast } from 'primevue/usetoast';
+
+const router = useRouter();
+const usuario = getUser();
+const toast = useToast();
+
+const totalPacientes = ref(null);
+const totalSecretarias = ref(null);
+const totalMedicos = ref(null);
+
+const puedeVerUsuarios = usuario?.role === 'admin' || usuario?.role === 'superadmin';
+const puedeVerCitas = usuario?.role === 'admin' || usuario?.role === 'secretaria';
+
+const hoy = new Date();
+const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+
+// ============ Citas de hoy ============
+const citasHoy = ref([]);
+const pacientes = ref([]);
+const errores = ref({});
+const visibleCitaDialog = ref(false);
+
+const citaVacia = {
+    hora: null,
+    motivo: ''
+};
+
+const cita = ref({ ...citaVacia });
+
+// Autocompletado de paciente: si se selecciona una sugerencia, este ref queda
+// con el objeto paciente completo; si el usuario solo escribe texto (sin
+// seleccionar), queda como string y, al guardar, se abre el formulario
+// completo de "Nuevo Paciente" (mismo que en Pacientes.vue) para registrarlo.
+const pacienteInput = ref('');
+const sugerenciasPacientes = ref([]);
+
+// ============ Paciente nuevo (mismo formulario que Pacientes.vue) ============
+const visibleNuevoPacienteDialog = ref(false);
+const erroresPaciente = ref({});
+
+const pacienteVacio = {
+    first_name: '',
+    last_name: '',
+    cedula: '',
+    pasaporte: '',
+    birth_date: null,
+    phone: '',
+    email: '',
+    address: '',
+    insurance: '',
+    emergency_contact: '',
+    emergency_phone: '',
+    medical_conditions: ''
+};
+
+const pacienteNuevo = ref({ ...pacienteVacio });
+
+const formatearFecha = (fecha) => {
+    const anio = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    const dia = String(fecha.getDate()).padStart(2, '0');
+    return `${anio}-${mes}-${dia}`;
+};
+
+const formatearHora = (fecha) => {
+    const horas = String(fecha.getHours()).padStart(2, '0');
+    const minutos = String(fecha.getMinutes()).padStart(2, '0');
+    return `${horas}:${minutos}`;
+};
+
+const cargarCitasHoy = async () => {
+    citasHoy.value = await funListarCitas({ fecha: hoyStr, estado: 'pendiente' });
+};
+
+const marcarComoAtendida = async (citaSeleccionada) => {
+    try {
+        await funActualizarCita(citaSeleccionada.id, {
+            fecha: hoyStr,
+            hora: citaSeleccionada.hora,
+            motivo: citaSeleccionada.motivo,
+            estado: 'completada'
+        });
+
+        toast.add({ severity: 'success', summary: 'Cita atendida', detail: 'Se marcó como completada', life: 3000 });
+
+        // Al filtrar por estado=pendiente, la cita atendida desaparece de esta lista.
+        await cargarCitasHoy();
+    } catch (error) {
+        console.error(error);
+
+        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message ?? 'Ocurrió un error inesperado', life: 3000 });
+    }
+};
+
+const nuevaCita = () => {
+    errores.value = {};
+    cita.value = { ...citaVacia };
+    pacienteInput.value = '';
+    visibleCitaDialog.value = true;
+};
+
+const buscarSugerenciasPacientes = (event) => {
+    const query = event.query.trim().toLowerCase();
+
+    sugerenciasPacientes.value = pacientes.value
+        .filter((p) => `${p.first_name} ${p.last_name}`.toLowerCase().includes(query) || (p.cedula ?? '').toLowerCase().includes(query))
+        .map((p) => ({ ...p, nombreCompleto: `${p.first_name} ${p.last_name}${p.cedula ? ' — CI ' + p.cedula : ''}` }));
+};
+
+const crearCitaConPaciente = async (patientId) => {
+    await funGuardarCita({
+        patient_id: patientId,
+        fecha: hoyStr,
+        hora: cita.value.hora ? formatearHora(cita.value.hora) : null,
+        motivo: cita.value.motivo
+    });
+
+    toast.add({ severity: 'success', summary: 'Cita creada', detail: 'La cita fue agendada correctamente', life: 3000 });
+
+    visibleCitaDialog.value = false;
+    await cargarCitasHoy();
+};
+
+const guardarCita = async () => {
+    try {
+        if (pacienteInput.value && typeof pacienteInput.value === 'object') {
+            // Paciente existente, elegido de las sugerencias.
+            await crearCitaConPaciente(pacienteInput.value.id);
+            return;
+        }
+
+        if (typeof pacienteInput.value === 'string' && pacienteInput.value.trim()) {
+            // No coincide con ningún paciente existente: se completa su registro
+            // con el mismo formulario de "Nuevo Paciente" antes de agendar.
+            const partes = pacienteInput.value.trim().split(/\s+/);
+
+            erroresPaciente.value = {};
+            pacienteNuevo.value = {
+                ...pacienteVacio,
+                first_name: partes[0] ?? '',
+                last_name: partes.slice(1).join(' ')
+            };
+            visibleNuevoPacienteDialog.value = true;
+            return;
+        }
+
+        toast.add({ severity: 'warn', summary: 'Falta el paciente', detail: 'Escribe el nombre del paciente', life: 3000 });
+    } catch (error) {
+        console.error(error);
+
+        if (error.response?.status === 422) {
+            errores.value = error.response.data.errors ?? {};
+        }
+
+        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message ?? 'Ocurrió un error inesperado', life: 3000 });
+    }
+};
+
+const guardarNuevoPacienteYCita = async () => {
+    try {
+        const datosEnviar = {
+            ...pacienteNuevo.value,
+            birth_date: pacienteNuevo.value.birth_date ? formatearFecha(pacienteNuevo.value.birth_date) : null
+        };
+
+        const { patient: nuevoPaciente } = await funGuardarPaciente(datosEnviar);
+
+        pacientes.value.push(nuevoPaciente);
+        totalPacientes.value = pacientes.value.length;
+
+        toast.add({ severity: 'success', summary: 'Paciente creado', detail: 'El paciente fue registrado correctamente', life: 3000 });
+
+        visibleNuevoPacienteDialog.value = false;
+        await crearCitaConPaciente(nuevoPaciente.id);
+    } catch (error) {
+        console.error(error);
+
+        if (error.response?.status === 422) {
+            erroresPaciente.value = error.response.data.errors ?? {};
+
+            toast.add({ severity: 'warn', summary: 'Datos inválidos', detail: 'Revisa los campos marcados', life: 3000 });
+            return;
+        }
+
+        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message ?? 'Ocurrió un error inesperado', life: 3000 });
+    }
+};
+
+onMounted(async () => {
+    try {
+        const listaPacientes = await funListarPacientes();
+        totalPacientes.value = listaPacientes.length;
+        pacientes.value = listaPacientes;
+    } catch (error) {
+        console.error(error);
+    }
+
+    if (puedeVerUsuarios) {
+        try {
+            const usuarios = await funListar();
+            totalSecretarias.value = usuarios.filter((u) => u.role === 'secretaria').length;
+            totalMedicos.value = usuarios.filter((u) => u.role === 'admin').length;
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    if (puedeVerCitas) {
+        try {
+            await cargarCitasHoy();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+});
 </script>
 
 <template>
-    <div class="grid grid-cols-12 gap-8">
-        <StatsWidget />
+    <div>
+        <Toast />
+        <div class="card mb-4">
+            <h2 class="m-0">Hola, {{ usuario?.name }}</h2>
+            <small class="text-surface-500">Resumen de tu cuenta.</small>
+        </div>
 
-        <div class="col-span-12 xl:col-span-6">
-            <RecentSalesWidget />
-            <BestSellingWidget />
+        <div class="grid grid-cols-12 gap-4 mb-4">
+            <div class="col-span-12 md:col-span-6 xl:col-span-4">
+                <div v-if="puedeVerCitas" class="card flex items-center gap-4">
+                    <div class="flex items-center justify-center rounded-border bg-blue-100 dark:bg-blue-400/10" style="width: 3rem; height: 3rem">
+                        <i class="pi pi-calendar text-blue-500 text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="block text-surface-500">Citas de hoy</span>
+                        <span class="text-xl font-bold">{{ citasHoy.length }}</span>
+                    </div>
+                </div>
+
+                <div v-else class="card flex items-center gap-4">
+                    <div class="flex items-center justify-center rounded-border bg-blue-100 dark:bg-blue-400/10" style="width: 3rem; height: 3rem">
+                        <i class="pi pi-id-card text-blue-500 text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="block text-surface-500">Pacientes</span>
+                        <span class="text-xl font-bold">{{ totalPacientes ?? '—' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="puedeVerUsuarios" class="col-span-12 md:col-span-6 xl:col-span-4">
+                <div class="card flex items-center gap-4">
+                    <div class="flex items-center justify-center rounded-border bg-purple-100 dark:bg-purple-400/10" style="width: 3rem; height: 3rem">
+                        <i class="pi pi-user text-purple-500 text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="block text-surface-500">Médicos</span>
+                        <span class="text-xl font-bold">{{ totalMedicos ?? '—' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="puedeVerUsuarios" class="col-span-12 md:col-span-6 xl:col-span-4">
+                <div class="card flex items-center gap-4">
+                    <div class="flex items-center justify-center rounded-border bg-orange-100 dark:bg-orange-400/10" style="width: 3rem; height: 3rem">
+                        <i class="pi pi-users text-orange-500 text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="block text-surface-500">Secretarias</span>
+                        <span class="text-xl font-bold">{{ totalSecretarias ?? '—' }}</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="col-span-12 xl:col-span-6">
-            <RevenueStreamWidget />
-            <NotificationsWidget />
+
+        <div v-if="puedeVerCitas" class="card mb-4">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="m-0">Citas pendientes de hoy</h3>
+                <Button label="Nueva cita" icon="pi pi-calendar-plus" @click="nuevaCita()" />
+            </div>
+
+            <DataTable :value="citasHoy" stripedRows showGridlines>
+                <Column field="hora" header="Hora"></Column>
+                <Column header="Paciente">
+                    <template #body="slotProps"> {{ slotProps.data.patient?.first_name }} {{ slotProps.data.patient?.last_name }} </template>
+                </Column>
+                <Column field="motivo" header="Motivo"></Column>
+                <Column header="Acciones">
+                    <template #body="slotProps">
+                        <Button icon="pi pi-check" severity="success" rounded label="Atendido" @click="marcarComoAtendida(slotProps.data)" />
+                    </template>
+                </Column>
+                <template #empty>No hay citas pendientes para hoy.</template>
+            </DataTable>
         </div>
+
+        <div v-if="usuario?.role !== 'secretaria'" class="card">
+            <h3 class="mt-0 mb-3">Accesos rápidos</h3>
+            <div class="flex flex-wrap gap-2">
+                <Button label="Ver pacientes" icon="pi pi-id-card" @click="router.push('/pacientes')" />
+                <Button v-if="puedeVerUsuarios" label="Ver usuarios" icon="pi pi-users" severity="secondary" @click="router.push('/usuarios')" />
+            </div>
+        </div>
+
+        <Dialog v-model:visible="visibleCitaDialog" header="Nueva cita" :modal="true" :style="{ width: '450px' }">
+            <div class="flex flex-col gap-3 pt-2">
+                <div class="flex items-center gap-2">
+                    <FloatLabel class="w-full">
+                        <AutoComplete id="patient_id" v-model="pacienteInput" :suggestions="sugerenciasPacientes" optionLabel="nombreCompleto" dropdown class="w-full" inputClass="w-full" @complete="buscarSugerenciasPacientes" />
+                        <label for="patient_id">Paciente</label>
+                    </FloatLabel>
+                    <i class="pi pi-info-circle text-surface-500" v-tooltip.top="'Si el paciente no aparece en las sugerencias, se registrará como nuevo (escribe nombre y apellido).'"></i>
+                </div>
+                <small v-if="errores.patient_id" class="text-red-500">{{ errores.patient_id[0] }}</small>
+
+                <FloatLabel class="w-full">
+                    <DatePicker id="hora" v-model="cita.hora" timeOnly hourFormat="12" showIcon iconDisplay="input" class="w-full" />
+                    <label for="hora">Hora</label>
+                </FloatLabel>
+                <small v-if="errores.hora" class="text-red-500">{{ errores.hora[0] }}</small>
+
+                <FloatLabel class="w-full">
+                    <Textarea id="motivo" v-model="cita.motivo" class="w-full" rows="2" autoResize />
+                    <label for="motivo">Motivo</label>
+                </FloatLabel>
+            </div>
+
+            <template #footer>
+                <Button label="Cancelar" severity="secondary" @click="visibleCitaDialog = false" />
+                <Button label="Agendar" icon="pi pi-check" @click="guardarCita()" />
+            </template>
+        </Dialog>
+
+        <!-- Paciente nuevo (mismo formulario que Pacientes.vue), para que al -->
+        <!-- verlo luego en Gestión de Pacientes ya tenga todos los datos. -->
+        <Dialog v-model:visible="visibleNuevoPacienteDialog" header="Nuevo Paciente" :modal="true" :style="{ width: '700px' }" :breakpoints="{ '960px': '90vw' }">
+            <div class="grid grid-cols-2 gap-4 pt-2">
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_first_name" v-model="pacienteNuevo.first_name" class="w-full" />
+                        <label for="np_first_name">Nombre</label>
+                    </FloatLabel>
+                    <small v-if="erroresPaciente.first_name" class="text-red-500">{{ erroresPaciente.first_name[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_last_name" v-model="pacienteNuevo.last_name" class="w-full" />
+                        <label for="np_last_name">Apellido</label>
+                    </FloatLabel>
+                    <small v-if="erroresPaciente.last_name" class="text-red-500">{{ erroresPaciente.last_name[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_cedula" v-model="pacienteNuevo.cedula" class="w-full" />
+                        <label for="np_cedula">Cédula</label>
+                    </FloatLabel>
+                    <small v-if="erroresPaciente.cedula" class="text-red-500">{{ erroresPaciente.cedula[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_pasaporte" v-model="pacienteNuevo.pasaporte" class="w-full" />
+                        <label for="np_pasaporte">Pasaporte (si es extranjero)</label>
+                    </FloatLabel>
+                    <small v-if="erroresPaciente.pasaporte" class="text-red-500">{{ erroresPaciente.pasaporte[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <DatePicker id="np_birth_date" v-model="pacienteNuevo.birth_date" class="w-full" dateFormat="dd/mm/yy" showIcon iconDisplay="input" />
+                        <label for="np_birth_date">Fecha de nacimiento</label>
+                    </FloatLabel>
+                    <small v-if="erroresPaciente.birth_date" class="text-red-500">{{ erroresPaciente.birth_date[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_phone" v-model="pacienteNuevo.phone" class="w-full" />
+                        <label for="np_phone">Teléfono</label>
+                    </FloatLabel>
+                    <small v-if="erroresPaciente.phone" class="text-red-500">{{ erroresPaciente.phone[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_email" v-model="pacienteNuevo.email" class="w-full" />
+                        <label for="np_email">Email</label>
+                    </FloatLabel>
+                    <small v-if="erroresPaciente.email" class="text-red-500">{{ erroresPaciente.email[0] }}</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_insurance" v-model="pacienteNuevo.insurance" class="w-full" />
+                        <label for="np_insurance">Seguro médico</label>
+                    </FloatLabel>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_emergency_contact" v-model="pacienteNuevo.emergency_contact" class="w-full" />
+                        <label for="np_emergency_contact">Contacto de emergencia</label>
+                    </FloatLabel>
+                </div>
+
+                <div class="flex flex-col gap-2 col-span-2">
+                    <FloatLabel class="w-full">
+                        <InputText id="np_emergency_phone" v-model="pacienteNuevo.emergency_phone" class="w-full" />
+                        <label for="np_emergency_phone">Teléfono de emergencia</label>
+                    </FloatLabel>
+                </div>
+
+                <div class="flex flex-col gap-2 col-span-2">
+                    <FloatLabel class="w-full">
+                        <Textarea id="np_address" v-model="pacienteNuevo.address" class="w-full" rows="2" autoResize />
+                        <label for="np_address">Dirección</label>
+                    </FloatLabel>
+                </div>
+
+                <div class="flex flex-col gap-2 col-span-2">
+                    <FloatLabel class="w-full">
+                        <Textarea id="np_medical_conditions" v-model="pacienteNuevo.medical_conditions" class="w-full" rows="3" autoResize />
+                        <label for="np_medical_conditions">Condiciones médicas</label>
+                    </FloatLabel>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancelar" severity="secondary" @click="visibleNuevoPacienteDialog = false" />
+                <Button label="Guardar y agendar" icon="pi pi-check" @click="guardarNuevoPacienteYCita()" />
+            </template>
+        </Dialog>
     </div>
 </template>
