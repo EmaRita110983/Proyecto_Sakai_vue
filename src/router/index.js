@@ -29,6 +29,14 @@ const router = createRouter({
                     }
                 },
                 {
+                    path: '/historial',
+                    name: 'historial',
+                    component: () => import('@/views/historial/HistorialPaciente.vue'),
+                    meta: {
+                        roles: ['superadmin', 'admin']
+                    }
+                },
+                {
                     path: '/pacientes/:id/historial',
                     name: 'historial-paciente',
                     component: () => import('@/views/historial/HistorialPaciente.vue'),

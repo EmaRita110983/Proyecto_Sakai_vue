@@ -76,3 +76,12 @@ const onMouseEnter = () => {
         </Transition>
     </li>
 </template>
+
+<style scoped>
+/* Color secundario del branding (por médico, editable solo por Superadmin):
+   marca el ítem activo del menú. Si el médico no tiene uno definido, cae al
+   color primario del tema. */
+.active-route {
+    box-shadow: inset 3px 0 0 0 var(--brand-secondary, var(--p-primary-color));
+}
+</style>

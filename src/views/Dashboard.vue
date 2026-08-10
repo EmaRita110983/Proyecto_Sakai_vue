@@ -1,12 +1,13 @@
 <script setup>
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { getUser } from '@/service/auth.service';
 import { funListarPacientes, funGuardarPaciente } from '@/service/patient.service';
 import { funListar } from '@/service/usuario.service';
 import { funListarCitas, funGuardarCita, funActualizarCita } from '@/service/cita.service';
 import { useToast } from 'primevue/usetoast';
 
+const route = useRoute();
 const router = useRouter();
 const usuario = getUser();
 const toast = useToast();
@@ -16,6 +17,9 @@ const totalSecretarias = ref(null);
 const totalMedicos = ref(null);
 
 const puedeVerUsuarios = usuario?.role === 'admin' || usuario?.role === 'superadmin';
+// El conteo de médicos solo tiene sentido para el superadmin: un admin es un
+// único médico (tenant), no gestiona otros médicos.
+const puedeVerMedicos = usuario?.role === 'superadmin';
 const puedeVerCitas = usuario?.role === 'admin' || usuario?.role === 'secretaria';
 
 const hoy = new Date();
@@ -193,6 +197,20 @@ const guardarNuevoPacienteYCita = async () => {
     }
 };
 
+// Acceso directo desde el sidebar ("Nueva cita"): abre el diálogo y limpia
+// el query para que un refresh no lo vuelva a abrir. Si ya estabas en el
+// Dashboard, Vue Router no remonta el componente (misma ruta '/', solo
+// cambia el query), así que además de llamarla en onMounted hace falta un
+// watch sobre el query para que también funcione en ese caso.
+const abrirNuevaCitaDesdeQuery = () => {
+    if (route.query.accion === 'nueva-cita' && puedeVerCitas) {
+        nuevaCita();
+        router.replace({ path: '/' });
+    }
+};
+
+watch(() => route.query.accion, abrirNuevaCitaDesdeQuery);
+
 onMounted(async () => {
     try {
         const listaPacientes = await funListarPacientes();
@@ -219,6 +237,8 @@ onMounted(async () => {
             console.error(error);
         }
     }
+
+    abrirNuevaCitaDesdeQuery();
 });
 </script>
 
@@ -226,53 +246,45 @@ onMounted(async () => {
     <div>
         <Toast />
         <div class="card mb-4">
-            <h2 class="m-0">Hola, {{ usuario?.name }}</h2>
+            <h2 class="m-0 font-display">Hola, {{ usuario?.name }}</h2>
             <small class="text-surface-500">Resumen de tu cuenta.</small>
         </div>
 
         <div class="grid grid-cols-12 gap-4 mb-4">
             <div class="col-span-12 md:col-span-6 xl:col-span-4">
-                <div v-if="puedeVerCitas" class="card flex items-center gap-4">
-                    <div class="flex items-center justify-center rounded-border bg-blue-100 dark:bg-blue-400/10" style="width: 3rem; height: 3rem">
-                        <i class="pi pi-calendar text-blue-500 text-xl"></i>
-                    </div>
+                <div v-if="puedeVerCitas" class="card stat-tile">
+                    <div class="stat-icon"><i class="pi pi-calendar"></i></div>
                     <div>
-                        <span class="block text-surface-500">Citas de hoy</span>
-                        <span class="text-xl font-bold">{{ citasHoy.length }}</span>
+                        <span class="stat-label">Citas de hoy</span>
+                        <span class="stat-num">{{ citasHoy.length }}</span>
                     </div>
                 </div>
 
-                <div v-else class="card flex items-center gap-4">
-                    <div class="flex items-center justify-center rounded-border bg-blue-100 dark:bg-blue-400/10" style="width: 3rem; height: 3rem">
-                        <i class="pi pi-id-card text-blue-500 text-xl"></i>
-                    </div>
+                <div v-else class="card stat-tile">
+                    <div class="stat-icon"><i class="pi pi-id-card"></i></div>
                     <div>
-                        <span class="block text-surface-500">Pacientes</span>
-                        <span class="text-xl font-bold">{{ totalPacientes ?? '—' }}</span>
+                        <span class="stat-label">Pacientes</span>
+                        <span class="stat-num">{{ totalPacientes ?? '—' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="puedeVerMedicos" class="col-span-12 md:col-span-6 xl:col-span-4">
+                <div class="card stat-tile">
+                    <div class="stat-icon"><i class="pi pi-user"></i></div>
+                    <div>
+                        <span class="stat-label">Médicos</span>
+                        <span class="stat-num">{{ totalMedicos ?? '—' }}</span>
                     </div>
                 </div>
             </div>
 
             <div v-if="puedeVerUsuarios" class="col-span-12 md:col-span-6 xl:col-span-4">
-                <div class="card flex items-center gap-4">
-                    <div class="flex items-center justify-center rounded-border bg-purple-100 dark:bg-purple-400/10" style="width: 3rem; height: 3rem">
-                        <i class="pi pi-user text-purple-500 text-xl"></i>
-                    </div>
+                <div class="card stat-tile">
+                    <div class="stat-icon"><i class="pi pi-users"></i></div>
                     <div>
-                        <span class="block text-surface-500">Médicos</span>
-                        <span class="text-xl font-bold">{{ totalMedicos ?? '—' }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div v-if="puedeVerUsuarios" class="col-span-12 md:col-span-6 xl:col-span-4">
-                <div class="card flex items-center gap-4">
-                    <div class="flex items-center justify-center rounded-border bg-orange-100 dark:bg-orange-400/10" style="width: 3rem; height: 3rem">
-                        <i class="pi pi-users text-orange-500 text-xl"></i>
-                    </div>
-                    <div>
-                        <span class="block text-surface-500">Secretarias</span>
-                        <span class="text-xl font-bold">{{ totalSecretarias ?? '—' }}</span>
+                        <span class="stat-label">Secretarias</span>
+                        <span class="stat-num">{{ totalSecretarias ?? '—' }}</span>
                     </div>
                 </div>
             </div>
@@ -280,12 +292,12 @@ onMounted(async () => {
 
         <div v-if="puedeVerCitas" class="card mb-4">
             <div class="flex justify-between items-center mb-3">
-                <h3 class="m-0">Citas pendientes de hoy</h3>
+                <h3 class="m-0 font-display" style="font-size: 1.05rem">Citas pendientes de hoy</h3>
                 <Button label="Nueva cita" icon="pi pi-calendar-plus" @click="nuevaCita()" />
             </div>
 
-            <DataTable :value="citasHoy" stripedRows showGridlines>
-                <Column field="hora" header="Hora"></Column>
+            <DataTable :value="citasHoy" stripedRows showGridlines size="small">
+                <Column field="hora" header="Hora" bodyClass="text-tabular"></Column>
                 <Column header="Paciente">
                     <template #body="slotProps"> {{ slotProps.data.patient?.first_name }} {{ slotProps.data.patient?.last_name }} </template>
                 </Column>
@@ -300,10 +312,11 @@ onMounted(async () => {
         </div>
 
         <div v-if="usuario?.role !== 'secretaria'" class="card">
-            <h3 class="mt-0 mb-3">Accesos rápidos</h3>
+            <h3 class="mt-0 mb-3 font-display" style="font-size: 1.05rem">Accesos rápidos</h3>
             <div class="flex flex-wrap gap-2">
                 <Button label="Ver pacientes" icon="pi pi-id-card" @click="router.push('/pacientes')" />
-                <Button v-if="puedeVerUsuarios" label="Ver usuarios" icon="pi pi-users" severity="secondary" @click="router.push('/usuarios')" />
+                <Button label="Historial clínico" icon="pi pi-book" severity="secondary" @click="router.push('/historial')" />
+                <Button v-if="usuario?.role === 'superadmin'" label="Ver usuarios" icon="pi pi-users" severity="secondary" @click="router.push('/usuarios')" />
             </div>
         </div>
 
@@ -326,7 +339,7 @@ onMounted(async () => {
 
                 <FloatLabel class="w-full">
                     <Textarea id="motivo" v-model="cita.motivo" class="w-full" rows="2" autoResize />
-                    <label for="motivo">Motivo</label>
+                    <label for="motivo">Síntoma</label>
                 </FloatLabel>
             </div>
 

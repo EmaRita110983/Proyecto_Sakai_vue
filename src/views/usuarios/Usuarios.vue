@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { funListar, funGuardar, funModificar, funCambiarEstado } from '@/service/usuario.service';
+import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar } from '@/service/usuario.service';
+import { funObtenerBrandingUsuario, funActualizarBrandingUsuario, funSubirLogoUsuario, funSubirHeaderIconoUsuario } from '@/service/tenant.service';
 import Toast from 'primevue/toast';
 import Toolbar from 'primevue/toolbar';
 import Button from 'primevue/button';
@@ -9,6 +10,9 @@ import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import Dialog from 'primevue/dialog';
 import FloatLabel from 'primevue/floatlabel';
+import ColorPicker from 'primevue/colorpicker';
+import FileUpload from 'primevue/fileupload';
+import Textarea from 'primevue/textarea';
 import { FilterMatchMode } from '@primevue/core/api';
 import { useToast } from 'primevue/usetoast';
 import ConfirmDialog from 'primevue/confirmdialog';
@@ -121,6 +125,184 @@ const desactivarUsuario = (usuario) => {
             }
         }
     });
+};
+
+const eliminarUsuario = (usuario) => {
+    confirm.require({
+        message: `¿Desea eliminar permanentemente al usuario ${usuario.name}? Esta acción no se puede deshacer.`,
+        header: 'Confirmar eliminación',
+
+        acceptLabel: 'Eliminar',
+        rejectLabel: 'Cancelar',
+        acceptProps: { severity: 'danger' },
+
+        accept: async () => {
+            try {
+                await funEliminar(usuario.id);
+
+                usuarios.value = await funListar();
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Usuario eliminado',
+                    detail: 'El usuario fue eliminado correctamente',
+                    life: 3000
+                });
+            } catch (error) {
+                if (error.response?.status === 403) {
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'No autorizado',
+                        detail: error.response.data.message ?? 'No puede eliminar este usuario',
+                        life: 3000
+                    });
+                } else {
+                    console.error(error);
+                }
+            }
+        }
+    });
+};
+
+const brandingDialogVisible = ref(false);
+const guardandoBranding = ref(false);
+const subiendoLogo = ref(false);
+const subiendoIconoIzquierdo = ref(false);
+const subiendoIconoDerecho = ref(false);
+const medicoBranding = ref(null);
+
+const brandingForm = ref({
+    brand_name: '',
+    brand_color: '6366f1',
+    brand_color_secondary: 'b9863b',
+    header_credentials: '',
+    licencia_declaracion: '',
+    logo_url: null,
+    header_icon_left_url: null,
+    header_icon_right_url: null
+});
+
+const abrirBranding = async (usuarioSeleccionado) => {
+    medicoBranding.value = usuarioSeleccionado;
+    brandingDialogVisible.value = true;
+
+    try {
+        const data = await funObtenerBrandingUsuario(usuarioSeleccionado.id);
+
+        brandingForm.value = {
+            brand_name: data.brand_name ?? '',
+            brand_color: (data.brand_color ?? '#6366f1').replace('#', ''),
+            brand_color_secondary: (data.brand_color_secondary ?? '#b9863b').replace('#', ''),
+            header_credentials: data.header_credentials ?? '',
+            licencia_declaracion: data.licencia_declaracion ?? '',
+            logo_url: data.logo_url,
+            header_icon_left_url: data.header_icon_left_url,
+            header_icon_right_url: data.header_icon_right_url
+        };
+    } catch (error) {
+        console.error(error);
+    }
+};
+
+const guardarBrandingUsuario = async () => {
+    guardandoBranding.value = true;
+
+    try {
+        await funActualizarBrandingUsuario(medicoBranding.value.id, {
+            brand_name: brandingForm.value.brand_name,
+            brand_color: `#${brandingForm.value.brand_color}`,
+            brand_color_secondary: `#${brandingForm.value.brand_color_secondary}`,
+            header_credentials: brandingForm.value.header_credentials,
+            licencia_declaracion: brandingForm.value.licencia_declaracion
+        });
+
+        toast.add({
+            severity: 'success',
+            summary: 'Marca actualizada',
+            detail: `El nombre, color y credenciales de ${medicoBranding.value.name} se actualizaron correctamente`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error(error);
+
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo actualizar la marca',
+            life: 3000
+        });
+    } finally {
+        guardandoBranding.value = false;
+    }
+};
+
+const subirLogoUsuario = async (event) => {
+    const archivo = event.files?.[0];
+
+    if (!archivo) return;
+
+    subiendoLogo.value = true;
+
+    try {
+        const data = await funSubirLogoUsuario(medicoBranding.value.id, archivo);
+
+        brandingForm.value.logo_url = data.logo_url;
+
+        toast.add({
+            severity: 'success',
+            summary: 'Logo actualizado',
+            detail: `El logo de ${medicoBranding.value.name} se actualizó correctamente`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error(error);
+
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo subir el logo',
+            life: 3000
+        });
+    } finally {
+        subiendoLogo.value = false;
+    }
+};
+
+const subirIconoHeader = async (lado, event) => {
+    const archivo = event.files?.[0];
+
+    if (!archivo) return;
+
+    const cargando = lado === 'left' ? subiendoIconoIzquierdo : subiendoIconoDerecho;
+    cargando.value = true;
+
+    try {
+        const data = await funSubirHeaderIconoUsuario(medicoBranding.value.id, lado, archivo);
+
+        if (lado === 'left') {
+            brandingForm.value.header_icon_left_url = data.header_icon_left_url;
+        } else {
+            brandingForm.value.header_icon_right_url = data.header_icon_right_url;
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: 'Ícono actualizado',
+            detail: `El ícono ${lado === 'left' ? 'izquierdo' : 'derecho'} de ${medicoBranding.value.name} se actualizó correctamente`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error(error);
+
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo subir el ícono',
+            life: 3000
+        });
+    } finally {
+        cargando.value = false;
+    }
 };
 
 const activarUsuario = async (usuario) => {
@@ -264,7 +446,7 @@ onMounted(async () => {
         <Toolbar class="mb-4">
             <template #start>
                 <div>
-                    <h2 class="m-0">Gestión de Usuarios</h2>
+                    <h2 class="m-0 font-display">Gestión de Usuarios</h2>
                     <small class="text-surface-500"> Administración de los usuarios del sistema. </small>
                 </div>
             </template>
@@ -281,24 +463,30 @@ onMounted(async () => {
             </IconField>
         </div>
 
-        <DataTable :value="usuarios" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll">
+        <DataTable :value="usuarios" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll" size="small">
             <Column field="id" header="ID"></Column>
             <Column field="name" header="Nombre"></Column>
             <Column field="email" header="Email"></Column>
-            <Column field="cedula" header="Cédula"></Column>
-            <Column field="role" header="Rol"></Column>
-            <Column header="Estado">
+            <Column field="cedula" header="Cédula" bodyClass="text-tabular"></Column>
+            <Column header="Rol">
                 <template #body="slotProps">
-                    <span v-if="slotProps.data.status">Activo</span>
-                    <span v-else>Inactivo</span>
+                    <span class="pill pill-neutral">{{ slotProps.data.role }}</span>
                 </template>
             </Column>
-            <Column header="Acciones">
+            <Column header="Estado">
+                <template #body="slotProps">
+                    <span v-if="slotProps.data.status" class="pill pill-good">Activo</span>
+                    <span v-else class="pill pill-critical">Inactivo</span>
+                </template>
+            </Column>
+            <Column header="Acciones" bodyStyle="white-space: nowrap">
     <template #body="slotProps">
         <div class="flex gap-2">
-            <Button icon="pi pi-pencil" severity="info" rounded @click="editarUsuario(slotProps.data)" />
-            <Button v-if="slotProps.data.status" icon="pi pi-ban" severity="danger" rounded @click="desactivarUsuario(slotProps.data)" />
-            <Button v-else icon="pi pi-check" severity="success" rounded @click="activarUsuario(slotProps.data)" />
+            <Button icon="pi pi-pencil" rounded size="small" @click="editarUsuario(slotProps.data)" />
+            <Button v-if="slotProps.data.status" icon="pi pi-ban" severity="danger" rounded size="small" @click="desactivarUsuario(slotProps.data)" />
+            <Button v-else icon="pi pi-check" severity="success" rounded size="small" @click="activarUsuario(slotProps.data)" />
+            <Button icon="pi pi-trash" severity="danger" rounded outlined size="small" @click="eliminarUsuario(slotProps.data)" />
+            <Button v-if="esSuperAdmin && slotProps.data.role === 'admin'" icon="pi pi-palette" rounded outlined size="small" @click="abrirBranding(slotProps.data)" />
         </div>
     </template>
 </Column>
@@ -357,6 +545,111 @@ onMounted(async () => {
                 <Button label="Cancelar" severity="secondary" @click="visibleDialog = false" />
 
                 <Button :label="editando ? 'Actualizar' : 'Guardar'" icon="pi pi-check" @click="editando ? actualizarUsuario() : guardarUsuario()" />
+            </template>
+        </Dialog>
+
+        <Dialog v-model:visible="brandingDialogVisible" :header="`Marca de ${medicoBranding?.name ?? ''}`" :modal="true" :style="{ width: '600px' }" :breakpoints="{ '960px': '90vw' }">
+            <div class="flex flex-col gap-4">
+                <small class="text-surface-500"> Nombre, color, logo, íconos y credenciales que verán este médico y sus secretarias en la app, y que se imprimen en el encabezado de los documentos (autorizaciones, etc). </small>
+
+                <FloatLabel>
+                    <InputText id="brand_name" v-model="brandingForm.brand_name" class="w-full" />
+                    <label for="brand_name">Nombre del médico (título del encabezado)</label>
+                </FloatLabel>
+
+                <FloatLabel class="w-full">
+                    <Textarea id="header_credentials" v-model="brandingForm.header_credentials" class="w-full" rows="4" autoResize />
+                    <label for="header_credentials">Credenciales (especialidad, teléfonos, email, dirección)</label>
+                </FloatLabel>
+                <small class="text-surface-500"> Este texto va debajo del nombre, en el centro del encabezado de los documentos. Escribe cada dato en una línea. </small>
+
+                <FloatLabel class="w-full">
+                    <Textarea id="licencia_declaracion" v-model="brandingForm.licencia_declaracion" class="w-full" rows="3" autoResize />
+                    <label for="licencia_declaracion">Declaración (Licencia Médica)</label>
+                </FloatLabel>
+                <small class="text-surface-500">
+                    Texto fijo que abre la Licencia Médica, ej: "Yo: Dra. Fulana de Tal Médico provisto del correspondiente exequátur No. 260-02 y Cédula de identidad y electoral No. 000-0000000-0 CERTIFICO, haber examinado a:". La app le agrega el
+                    nombre y cédula del paciente y ", TITULAR." automáticamente.
+                </small>
+
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold">Color principal</label>
+                    <div class="flex items-center gap-3">
+                        <ColorPicker v-model="brandingForm.brand_color" />
+                        <span>#{{ brandingForm.brand_color }}</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold">Color secundario</label>
+                    <div class="flex items-center gap-3">
+                        <ColorPicker v-model="brandingForm.brand_color_secondary" />
+                        <span>#{{ brandingForm.brand_color_secondary }}</span>
+                    </div>
+                    <small class="text-surface-500">Se usa en detalles puntuales, como el indicador del ítem activo en el menú.</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold">Logo (topbar de la aplicación)</label>
+                    <div class="flex items-center gap-4">
+                        <img v-if="brandingForm.logo_url" :src="brandingForm.logo_url" alt="Logo actual" style="height: 3rem; width: auto" />
+
+                        <FileUpload
+                            mode="basic"
+                            name="logo"
+                            accept="image/png,image/jpeg,image/svg+xml"
+                            :maxFileSize="2000000"
+                            :auto="true"
+                            chooseLabel="Cambiar logo"
+                            :customUpload="true"
+                            @uploader="subirLogoUsuario"
+                            :disabled="subiendoLogo"
+                        />
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold">Ícono izquierdo del encabezado (documentos)</label>
+                    <div class="flex items-center gap-4">
+                        <img v-if="brandingForm.header_icon_left_url" :src="brandingForm.header_icon_left_url" alt="Ícono izquierdo actual" style="height: 3rem; width: auto" />
+
+                        <FileUpload
+                            mode="basic"
+                            name="icon"
+                            accept="image/png,image/jpeg,image/svg+xml"
+                            :maxFileSize="2000000"
+                            :auto="true"
+                            chooseLabel="Cambiar ícono izquierdo"
+                            :customUpload="true"
+                            @uploader="(e) => subirIconoHeader('left', e)"
+                            :disabled="subiendoIconoIzquierdo"
+                        />
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-semibold">Ícono derecho del encabezado (documentos)</label>
+                    <div class="flex items-center gap-4">
+                        <img v-if="brandingForm.header_icon_right_url" :src="brandingForm.header_icon_right_url" alt="Ícono derecho actual" style="height: 3rem; width: auto" />
+
+                        <FileUpload
+                            mode="basic"
+                            name="icon"
+                            accept="image/png,image/jpeg,image/svg+xml"
+                            :maxFileSize="2000000"
+                            :auto="true"
+                            chooseLabel="Cambiar ícono derecho"
+                            :customUpload="true"
+                            @uploader="(e) => subirIconoHeader('right', e)"
+                            :disabled="subiendoIconoDerecho"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cerrar" severity="secondary" @click="brandingDialogVisible = false" />
+                <Button label="Guardar nombre, color y credenciales" icon="pi pi-check" :loading="guardandoBranding" @click="guardarBrandingUsuario" />
             </template>
         </Dialog>
     </div>

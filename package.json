@@ -8,6 +8,9 @@
         "lint": "eslint --fix . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
     },
     "dependencies": {
+        "@fontsource/ibm-plex-mono": "^5.3.0",
+        "@fontsource/ibm-plex-sans": "^5.3.0",
+        "@fontsource/manrope": "^5.3.0",
         "@primeuix/themes": "^2.0.0",
         "axios": "^1.18.1",
         "primeicons": "^7.0.0",

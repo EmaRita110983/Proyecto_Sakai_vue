@@ -66,9 +66,15 @@ const nuevoPaciente = () => {
     visibleDialog.value = true;
 };
 
-// Convierte 'YYYY-MM-DD' (string que llega del backend) a un objeto Date para el DatePicker
+// Convierte 'YYYY-MM-DD' (string que llega del backend) a un objeto Date para el DatePicker.
+// Se arma a mano a partir de los componentes de texto en vez de `new Date(fechaStr)`:
+// el backend serializa en UTC medianoche, y en zonas horarias detrás de UTC
+// (ej. RD, UTC-4) leer esa fecha con getters locales corre el día uno hacia atrás.
 const parsearFecha = (fechaStr) => {
-    return fechaStr ? new Date(fechaStr) : null;
+    if (!fechaStr) return null;
+
+    const [anio, mes, dia] = fechaStr.slice(0, 10).split('-').map(Number);
+    return new Date(anio, mes - 1, dia);
 };
 
 const editarPaciente = (pacienteSeleccionado) => {
@@ -235,6 +241,7 @@ onMounted(async () => {
             stripedRows
             showGridlines
             responsiveLayout="scroll"
+            size="small"
         >
             <Column field="id" header="ID"></Column>
             <Column field="first_name" header="Nombre"></Column>
@@ -243,12 +250,12 @@ onMounted(async () => {
             <Column field="pasaporte" header="Pasaporte"></Column>
             <Column field="phone" header="Teléfono"></Column>
             <Column field="email" header="Email"></Column>
-            <Column header="Acciones">
+            <Column header="Acciones" bodyStyle="white-space: nowrap">
                 <template #body="slotProps">
                     <div class="flex gap-2">
-                        <Button v-if="puedeVerHistorial" icon="pi pi-book" severity="secondary" rounded @click="router.push(`/pacientes/${slotProps.data.id}/historial`)" />
-                        <Button icon="pi pi-pencil" severity="info" rounded @click="editarPaciente(slotProps.data)" />
-                        <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded @click="eliminarPaciente(slotProps.data)" />
+                        <Button v-if="puedeVerHistorial" icon="pi pi-book" rounded size="small" @click="router.push(`/pacientes/${slotProps.data.id}/historial`)" />
+                        <Button icon="pi pi-pencil" rounded size="small" @click="editarPaciente(slotProps.data)" />
+                        <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarPaciente(slotProps.data)" />
                     </div>
                 </template>
             </Column>

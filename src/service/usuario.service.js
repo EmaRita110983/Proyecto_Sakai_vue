@@ -42,3 +42,14 @@ export async function funCambiarEstado(id) {
     return response.data;
 
 }
+
+
+export async function funEliminar(id) {
+
+    const response = await api.delete(
+        `/v1/users/${id}`
+    );
+
+    return response.data;
+
+}

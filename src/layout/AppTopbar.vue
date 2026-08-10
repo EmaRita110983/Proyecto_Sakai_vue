@@ -5,6 +5,7 @@ console.log('AppTopbar cargado');
 import { useLayout } from '@/layout/composables/layout';
 import AppConfigurator from './AppConfigurator.vue';
 import { useAuth } from '@/composables/useAuth';
+import { useBranding } from '@/composables/useBranding';
 import { useRouter } from 'vue-router';
 import api from '@/service/api';
 
@@ -12,9 +13,11 @@ const router = useRouter();
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
 const { usuario, cargarUsuario } = useAuth();
+const { branding, cargarBranding } = useBranding();
 
 const cargar = async () => {
     await cargarUsuario();
+    await cargarBranding();
 
     setTimeout(() => {
         console.log('Usuario actual:', usuario.value);
@@ -42,7 +45,12 @@ const logout = async () => {
             <button class="layout-menu-button layout-topbar-action" @click="toggleMenu">
                 <i class="pi pi-bars"></i>
             </button>
-            <router-link to="/" class="layout-topbar-logo">
+            <router-link v-if="branding.logo_url" to="/" class="layout-topbar-logo">
+                <img :src="branding.logo_url" :alt="branding.brand_name || 'Logo'" style="height: 2rem; width: auto" />
+                <span>{{ branding.brand_name || 'SAKAI' }}</span>
+            </router-link>
+
+            <router-link v-else to="/" class="layout-topbar-logo">
                 <svg viewBox="0 0 54 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                         fill-rule="evenodd"
@@ -61,7 +69,7 @@ const logout = async () => {
                     </g>
                 </svg>
 
-                <span>SAKAI</span>
+                <span>{{ branding.brand_name || 'SAKAI' }}</span>
             </router-link>
         </div>
 
@@ -91,14 +99,6 @@ const logout = async () => {
 
             <div class="layout-topbar-menu hidden lg:block">
                 <div class="layout-topbar-menu-content">
-                    <button type="button" class="layout-topbar-action">
-                        <i class="pi pi-calendar"></i>
-                        <span>Calendar</span>
-                    </button>
-                    <button type="button" class="layout-topbar-action">
-                        <i class="pi pi-inbox"></i>
-                        <span>Messages</span>
-                    </button>
                     <button type="button" class="layout-topbar-action" @click="logout">
                         <i class="pi pi-sign-out"></i>
                         <span>Cerrar sesión</span>

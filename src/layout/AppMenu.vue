@@ -20,7 +20,7 @@ const model = ref([
         visible: hasRole('superadmin') || hasRole('admin') || hasRole('secretaria'),
         items: [
             {
-                label: 'Usuarios',
+                label: hasRole('admin') ? 'Secretaria' : 'Usuarios',
                 icon: 'pi pi-fw pi-users',
                 to: '/usuarios',
                 visible: hasRole('superadmin') || hasRole('admin')
@@ -30,6 +30,30 @@ const model = ref([
                 icon: 'pi pi-fw pi-id-card',
                 to: '/pacientes',
                 visible: hasRole('superadmin') || hasRole('admin') || hasRole('secretaria')
+            },
+            {
+                label: 'Historial clínico',
+                icon: 'pi pi-fw pi-book',
+                to: '/historial',
+                visible: hasRole('superadmin') || hasRole('admin')
+            },
+            {
+                label: 'Nueva cita',
+                icon: 'pi pi-fw pi-calendar-plus',
+                to: { path: '/', query: { accion: 'nueva-cita' } },
+                visible: hasRole('admin') || hasRole('secretaria')
+            }
+        ]
+    },
+
+    {
+        label: 'Cuenta',
+        visible: !hasRole('admin'),
+        items: [
+            {
+                label: 'Mi Perfil',
+                icon: 'pi pi-fw pi-user',
+                to: '/perfil'
             }
         ]
     }
