@@ -26,11 +26,20 @@ export async function funActualizarBrandingUsuario(id, branding) {
 
     const response = await api.put(`/v1/users/${id}/branding`, {
         brand_name: branding.brand_name,
-        brand_color: branding.brand_color,
-        brand_color_secondary: branding.brand_color_secondary,
         header_credentials: branding.header_credentials,
         licencia_declaracion: branding.licencia_declaracion
     });
+
+    return response.data;
+
+}
+
+
+// El propio médico (admin) fija su color principal desde la paleta de
+// colores de la app (AppConfigurator) — el Superadmin ya no lo hace por él.
+export async function funActualizarColorPropio(color) {
+
+    const response = await api.put('/v1/branding/color', { brand_color: color });
 
     return response.data;
 

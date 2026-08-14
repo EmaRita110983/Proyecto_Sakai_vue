@@ -21,6 +21,10 @@ const puedeVerUsuarios = usuario?.role === 'admin' || usuario?.role === 'superad
 // único médico (tenant), no gestiona otros médicos.
 const puedeVerMedicos = usuario?.role === 'superadmin';
 const puedeVerCitas = usuario?.role === 'admin' || usuario?.role === 'secretaria';
+// El superadmin no gestiona pacientes ni secretarias de ningún tenant en
+// particular, así que su Dashboard no muestra esos conteos, solo el de
+// médicos (puedeVerMedicos arriba).
+const puedeVerSecretarias = usuario?.role === 'admin';
 
 const hoy = new Date();
 const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
@@ -251,7 +255,7 @@ onMounted(async () => {
         </div>
 
         <div class="grid grid-cols-12 gap-4 mb-4">
-            <div class="col-span-12 md:col-span-6 xl:col-span-4">
+            <div v-if="usuario?.role !== 'superadmin'" class="col-span-12 md:col-span-6 xl:col-span-4">
                 <div v-if="puedeVerCitas" class="card stat-tile">
                     <div class="stat-icon"><i class="pi pi-calendar"></i></div>
                     <div>
@@ -279,7 +283,7 @@ onMounted(async () => {
                 </div>
             </div>
 
-            <div v-if="puedeVerUsuarios" class="col-span-12 md:col-span-6 xl:col-span-4">
+            <div v-if="puedeVerSecretarias" class="col-span-12 md:col-span-6 xl:col-span-4">
                 <div class="card stat-tile">
                     <div class="stat-icon"><i class="pi pi-users"></i></div>
                     <div>
@@ -314,8 +318,8 @@ onMounted(async () => {
         <div v-if="usuario?.role !== 'secretaria'" class="card">
             <h3 class="mt-0 mb-3 font-display" style="font-size: 1.05rem">Accesos rápidos</h3>
             <div class="flex flex-wrap gap-2">
-                <Button label="Ver pacientes" icon="pi pi-id-card" @click="router.push('/pacientes')" />
-                <Button label="Historial clínico" icon="pi pi-book" severity="secondary" @click="router.push('/historial')" />
+                <Button v-if="usuario?.role === 'admin'" label="Ver pacientes" icon="pi pi-id-card" @click="router.push('/pacientes')" />
+                <Button v-if="usuario?.role === 'admin'" label="Historial clínico" icon="pi pi-book" severity="secondary" @click="router.push('/historial')" />
                 <Button v-if="usuario?.role === 'superadmin'" label="Ver usuarios" icon="pi pi-users" severity="secondary" @click="router.push('/usuarios')" />
             </div>
         </div>

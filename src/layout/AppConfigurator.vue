@@ -5,8 +5,11 @@ import Aura from '@primeuix/themes/aura';
 import Lara from '@primeuix/themes/lara';
 import Nora from '@primeuix/themes/nora';
 import { ref } from 'vue';
+import { getUser } from '@/service/auth.service';
+import { funActualizarColorPropio } from '@/service/tenant.service';
 
 const { layoutConfig, isDarkTheme, changeMenuMode } = useLayout();
+const usuario = getUser();
 
 const presets = {
     Aura,
@@ -175,6 +178,14 @@ function updateColors(type, color) {
     }
 
     applyTheme(type, color);
+
+    // El médico (admin) fija su color principal desde acá — es la única vía
+    // para asignarlo, así queda guardado y aplicado en sus próximas sesiones
+    // (ver useBranding.js). "noir" no tiene un hex representativo (usa los
+    // tonos de superficie), así que no se persiste ese caso.
+    if (type === 'primary' && usuario?.role === 'admin' && color.palette['500']) {
+        funActualizarColorPropio(color.palette['500']).catch((error) => console.error('No se pudo guardar el color de marca', error));
+    }
 }
 
 function applyTheme(type, color) {

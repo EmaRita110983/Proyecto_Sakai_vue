@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar } from '@/service/usuario.service';
 import { funObtenerBrandingUsuario, funActualizarBrandingUsuario, funSubirLogoUsuario, funSubirHeaderIconoUsuario } from '@/service/tenant.service';
+import { usuariosFilterResetSignal } from '@/composables/useUsuariosFilter';
 import Toast from 'primevue/toast';
 import Toolbar from 'primevue/toolbar';
 import Button from 'primevue/button';
@@ -10,7 +11,6 @@ import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import Dialog from 'primevue/dialog';
 import FloatLabel from 'primevue/floatlabel';
-import ColorPicker from 'primevue/colorpicker';
 import FileUpload from 'primevue/fileupload';
 import Textarea from 'primevue/textarea';
 import { FilterMatchMode } from '@primevue/core/api';
@@ -45,11 +45,26 @@ const medicos = computed(() => usuarios.value.filter((u) => u.role === 'admin').
 
 const mostrarSelectorMedico = computed(() => !editando.value && esSuperAdmin && usuario.value.role === 'secretaria');
 
+// El admin solo gestiona sus propias secretarias desde esta pantalla (siempre
+// crea para sí mismo, ver comentario de `medicos` arriba); el Superadmin
+// gestiona usuarios de cualquier rol, así que mantiene el texto genérico.
+const tituloGestion = esSuperAdmin ? 'Gestión de Usuarios' : 'Gestión de Secretarias';
+const subtituloGestion = esSuperAdmin ? 'Administración de los usuarios del sistema.' : 'Administración de las secretarias de tu consultorio.';
+const labelNuevo = esSuperAdmin ? 'Nuevo Usuario' : 'Nueva Secretaria';
+
 const filters = ref({
     global: {
         value: null,
         matchMode: FilterMatchMode.CONTAINS
     }
+});
+
+// Ver useUsuariosFilter.js: un clic en "Usuarios"/"Secretaria" del sidebar
+// mientras ya se está en esta pantalla no navega (Vue Router no dispara nada
+// al ser la misma ruta), así que esta señal es la única forma de enterarse
+// de que hay que limpiar el filtro y volver a mostrar todos los usuarios.
+watch(usuariosFilterResetSignal, () => {
+    filters.value.global.value = null;
 });
 
 const actualizarUsuario = async () => {
@@ -173,8 +188,6 @@ const medicoBranding = ref(null);
 
 const brandingForm = ref({
     brand_name: '',
-    brand_color: '6366f1',
-    brand_color_secondary: 'b9863b',
     header_credentials: '',
     licencia_declaracion: '',
     logo_url: null,
@@ -191,8 +204,6 @@ const abrirBranding = async (usuarioSeleccionado) => {
 
         brandingForm.value = {
             brand_name: data.brand_name ?? '',
-            brand_color: (data.brand_color ?? '#6366f1').replace('#', ''),
-            brand_color_secondary: (data.brand_color_secondary ?? '#b9863b').replace('#', ''),
             header_credentials: data.header_credentials ?? '',
             licencia_declaracion: data.licencia_declaracion ?? '',
             logo_url: data.logo_url,
@@ -210,8 +221,6 @@ const guardarBrandingUsuario = async () => {
     try {
         await funActualizarBrandingUsuario(medicoBranding.value.id, {
             brand_name: brandingForm.value.brand_name,
-            brand_color: `#${brandingForm.value.brand_color}`,
-            brand_color_secondary: `#${brandingForm.value.brand_color_secondary}`,
             header_credentials: brandingForm.value.header_credentials,
             licencia_declaracion: brandingForm.value.licencia_declaracion
         });
@@ -219,7 +228,7 @@ const guardarBrandingUsuario = async () => {
         toast.add({
             severity: 'success',
             summary: 'Marca actualizada',
-            detail: `El nombre, color y credenciales de ${medicoBranding.value.name} se actualizaron correctamente`,
+            detail: `El nombre y las credenciales de ${medicoBranding.value.name} se actualizaron correctamente`,
             life: 3000
         });
     } catch (error) {
@@ -446,13 +455,13 @@ onMounted(async () => {
         <Toolbar class="mb-4">
             <template #start>
                 <div>
-                    <h2 class="m-0 font-display">Gestión de Usuarios</h2>
-                    <small class="text-surface-500"> Administración de los usuarios del sistema. </small>
+                    <h2 class="m-0 font-display">{{ tituloGestion }}</h2>
+                    <small class="text-surface-500"> {{ subtituloGestion }} </small>
                 </div>
             </template>
 
             <template #end>
-                <Button label="Nuevo Usuario" icon="pi pi-user-plus" @click="nuevoUsuario()" />
+                <Button :label="labelNuevo" icon="pi pi-user-plus" @click="nuevoUsuario()" />
             </template>
         </Toolbar>
 
@@ -550,7 +559,7 @@ onMounted(async () => {
 
         <Dialog v-model:visible="brandingDialogVisible" :header="`Marca de ${medicoBranding?.name ?? ''}`" :modal="true" :style="{ width: '600px' }" :breakpoints="{ '960px': '90vw' }">
             <div class="flex flex-col gap-4">
-                <small class="text-surface-500"> Nombre, color, logo, íconos y credenciales que verán este médico y sus secretarias en la app, y que se imprimen en el encabezado de los documentos (autorizaciones, etc). </small>
+                <small class="text-surface-500"> Nombre, logo, íconos y credenciales que verán este médico y sus secretarias en la app, y que se imprimen en el encabezado de los documentos (autorizaciones, etc). </small>
 
                 <FloatLabel>
                     <InputText id="brand_name" v-model="brandingForm.brand_name" class="w-full" />
@@ -572,22 +581,7 @@ onMounted(async () => {
                     nombre y cédula del paciente y ", TITULAR." automáticamente.
                 </small>
 
-                <div class="flex flex-col gap-2">
-                    <label class="text-sm font-semibold">Color principal</label>
-                    <div class="flex items-center gap-3">
-                        <ColorPicker v-model="brandingForm.brand_color" />
-                        <span>#{{ brandingForm.brand_color }}</span>
-                    </div>
-                </div>
-
-                <div class="flex flex-col gap-2">
-                    <label class="text-sm font-semibold">Color secundario</label>
-                    <div class="flex items-center gap-3">
-                        <ColorPicker v-model="brandingForm.brand_color_secondary" />
-                        <span>#{{ brandingForm.brand_color_secondary }}</span>
-                    </div>
-                    <small class="text-surface-500">Se usa en detalles puntuales, como el indicador del ítem activo en el menú.</small>
-                </div>
+                <small class="text-surface-500"> El color principal ya no se asigna aquí: cada médico lo elige desde la paleta de colores de la app (panel de configuración, arriba a la derecha). </small>
 
                 <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold">Logo (topbar de la aplicación)</label>
@@ -649,7 +643,7 @@ onMounted(async () => {
 
             <template #footer>
                 <Button label="Cerrar" severity="secondary" @click="brandingDialogVisible = false" />
-                <Button label="Guardar nombre, color y credenciales" icon="pi pi-check" :loading="guardandoBranding" @click="guardarBrandingUsuario" />
+                <Button label="Guardar nombre y credenciales" icon="pi pi-check" :loading="guardandoBranding" @click="guardarBrandingUsuario" />
             </template>
         </Dialog>
     </div>

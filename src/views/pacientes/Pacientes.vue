@@ -1,8 +1,9 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { funListarPacientes, funGuardarPaciente, funActualizarPaciente, funEliminarPaciente } from '@/service/patient.service';
 import { getUser } from '@/service/auth.service';
+import { pacientesFilterResetSignal } from '@/composables/usePacientesFilter';
 import Toast from 'primevue/toast';
 import Toolbar from 'primevue/toolbar';
 import Button from 'primevue/button';
@@ -57,6 +58,14 @@ const filters = ref({
         value: null,
         matchMode: FilterMatchMode.CONTAINS
     }
+});
+
+// Ver usePacientesFilter.js: un clic en "Pacientes" del sidebar mientras ya
+// se está en esta pantalla no navega (Vue Router no dispara nada al ser la
+// misma ruta), así que esta señal es la única forma de enterarse de que hay
+// que limpiar el filtro y volver a mostrar todos los pacientes.
+watch(pacientesFilterResetSignal, () => {
+    filters.value.global.value = null;
 });
 
 const nuevoPaciente = () => {

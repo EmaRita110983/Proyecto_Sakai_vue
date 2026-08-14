@@ -1,8 +1,10 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { computed } from 'vue';
+import { useRoute } from 'vue-router';
 
 const { layoutState, isDesktop } = useLayout();
+const route = useRoute();
 
 const props = defineProps({
     item: {
@@ -23,6 +25,22 @@ const fullPath = computed(() => (props.item.path ? (props.parentPath ? props.par
 
 const isActive = computed(() => {
     return props.item.path ? layoutState.activePath?.startsWith(fullPath.value) : layoutState.activePath === props.item.to;
+});
+
+// Resalta el link según la ruta real, no via exactActiveClass de Vue Router:
+// exactActiveClass ignora el query string, así que "Nueva cita" (misma ruta
+// '/' que Dashboard, solo cambia el query) quedaba resaltado todo el tiempo
+// que estuvieras en el Dashboard. Los ítems que son solo un atajo de acción
+// sobre la página actual (no un destino real) marcan `disableActiveHighlight`
+// para no resaltarse nunca. `activeNames` cubre los casos con más de una
+// ruta para la misma pantalla (ej. Historial clínico: `/historial` y
+// `/pacientes/:id/historial` apuntan al mismo componente).
+const isRouteActive = computed(() => {
+    if (props.item.disableActiveHighlight || !props.item.to) return false;
+    if (props.item.activeNames) return props.item.activeNames.includes(route.name);
+
+    const targetPath = typeof props.item.to === 'string' ? props.item.to : props.item.to.path;
+    return route.path === targetPath;
 });
 
 const itemClick = (event, item) => {
@@ -64,7 +82,7 @@ const onMouseEnter = () => {
             <span class="layout-menuitem-text">{{ item.label }}</span>
             <i class="pi pi-fw pi-angle-down layout-submenu-toggler" v-if="item.items" />
         </a>
-        <router-link v-if="item.to && !item.items && item.visible !== false" @click="itemClick($event, item)" exactActiveClass="active-route" :class="item.class" tabindex="0" :to="item.to" @mouseenter="onMouseEnter">
+        <router-link v-if="item.to && !item.items && item.visible !== false" @click="itemClick($event, item)" :class="[item.class, { 'active-route': isRouteActive }]" tabindex="0" :to="item.to" @mouseenter="onMouseEnter">
             <i :class="item.icon" class="layout-menuitem-icon" />
             <span class="layout-menuitem-text">{{ item.label }}</span>
             <i class="pi pi-fw pi-angle-down layout-submenu-toggler" v-if="item.items" />

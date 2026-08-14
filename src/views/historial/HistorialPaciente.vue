@@ -69,6 +69,7 @@ const buscarPorCedula = async () => {
         }
 
         router.push(`/pacientes/${encontrado.id}/historial`);
+        busquedaCedula.value = '';
     } catch (error) {
         console.error(error);
     }
