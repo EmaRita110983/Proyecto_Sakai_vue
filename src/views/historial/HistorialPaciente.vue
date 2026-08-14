@@ -76,6 +76,22 @@ const buscarPorCedula = async () => {
 };
 
 // ============ Impresión ============
+// Los datos del paciente/documento (nombre, motivo, diagnóstico, etc.) y del
+// branding se arman a mano como HTML para la ventana de impresión — sin
+// escapar, cualquier dato guardado con una etiqueta <script> se ejecutaría al
+// imprimir. Toda interpolación de un valor que no sea texto fijo del propio
+// código (título, etiquetas de campo) debe pasar por acá primero.
+const escapeHtml = (valor) => {
+    if (valor === null || valor === undefined) return '';
+
+    return String(valor)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+};
+
 const imprimirDocumento = (titulo, contenidoHtml) => {
     const ventana = window.open('', '_blank');
 
@@ -223,12 +239,12 @@ const imprimirHistorial = (entrada) => {
     imprimirDocumento(
         'Historial clínico',
         `
-        <div class="campo"><label>Paciente</label><p>${nombrePaciente}</p></div>
-        <div class="campo"><label>Fecha de consulta</label><p>${entrada.fecha_consulta ?? ''}</p></div>
-        <div class="campo"><label>Motivo de consulta</label><p>${entrada.motivo_consulta ?? ''}</p></div>
-        <div class="campo"><label>Diagnóstico</label><p>${entrada.diagnostico ?? ''}</p></div>
-        <div class="campo"><label>Tratamiento</label><p>${entrada.tratamiento ?? ''}</p></div>
-        <div class="campo"><label>Observaciones</label><p>${entrada.observaciones ?? ''}</p></div>
+        <div class="campo"><label>Paciente</label><p>${escapeHtml(nombrePaciente)}</p></div>
+        <div class="campo"><label>Fecha de consulta</label><p>${escapeHtml(entrada.fecha_consulta)}</p></div>
+        <div class="campo"><label>Motivo de consulta</label><p>${escapeHtml(entrada.motivo_consulta)}</p></div>
+        <div class="campo"><label>Diagnóstico</label><p>${escapeHtml(entrada.diagnostico)}</p></div>
+        <div class="campo"><label>Tratamiento</label><p>${escapeHtml(entrada.tratamiento)}</p></div>
+        <div class="campo"><label>Observaciones</label><p>${escapeHtml(entrada.observaciones)}</p></div>
         `
     );
 };
@@ -442,12 +458,12 @@ const imprimirReceta = (recetaSeleccionada) => {
             </head>
             <body>
                 <div class="header">
-                    ${branding.value.header_icon_left_url ? `<img src="${branding.value.header_icon_left_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
-                        <h2>${branding.value.brand_name ?? ''}</h2>
-                        <div class="parrafo">${branding.value.header_credentials ?? ''}</div>
+                        <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
-                    ${branding.value.header_icon_right_url ? `<img src="${branding.value.header_icon_right_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
                 </div>
 
                 <hr />
@@ -458,11 +474,11 @@ const imprimirReceta = (recetaSeleccionada) => {
                     <div class="col-izquierda">
                         <div class="datos-paciente">
                             <div class="col-paciente">
-                                <strong>Paciente:</strong> ${nombrePaciente.toUpperCase()}<br />
-                                <strong>Céd:</strong> ${paciente.value?.cedula ?? ''}<br />
+                                <strong>Paciente:</strong> ${escapeHtml(nombrePaciente.toUpperCase())}<br />
+                                <strong>Céd:</strong> ${escapeHtml(paciente.value?.cedula)}<br />
                                 <strong>Edad:</strong> ${edad}
                             </div>
-                            <div class="col-ars"><strong>ARS:</strong> ${ars}</div>
+                            <div class="col-ars"><strong>ARS:</strong> ${escapeHtml(ars)}</div>
                         </div>
                     </div>
                     <div class="col-derecha">
@@ -475,8 +491,8 @@ const imprimirReceta = (recetaSeleccionada) => {
                     <div class="rx-row">
                         <div class="rx">℞</div>
                         <div class="rx-contenido">
-                            <p>${recetaSeleccionada.medicamentos ?? ''}</p>
-                            ${recetaSeleccionada.indicaciones ? `<p>${recetaSeleccionada.indicaciones}</p>` : ''}
+                            <p>${escapeHtml(recetaSeleccionada.medicamentos)}</p>
+                            ${recetaSeleccionada.indicaciones ? `<p>${escapeHtml(recetaSeleccionada.indicaciones)}</p>` : ''}
                         </div>
                     </div>
                 </div>
@@ -625,12 +641,12 @@ const imprimirDietaDoc = (dietaSeleccionada) => {
             </head>
             <body>
                 <div class="header">
-                    ${branding.value.header_icon_left_url ? `<img src="${branding.value.header_icon_left_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
-                        <h2>${branding.value.brand_name ?? ''}</h2>
-                        <div class="parrafo">${branding.value.header_credentials ?? ''}</div>
+                        <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
-                    ${branding.value.header_icon_right_url ? `<img src="${branding.value.header_icon_right_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
                 </div>
 
                 <hr />
@@ -639,8 +655,8 @@ const imprimirDietaDoc = (dietaSeleccionada) => {
 
                 <div class="caja-titulo">
                     <div class="col-izquierda">
-                        <strong>Paciente:</strong> ${nombrePaciente.toUpperCase()}<br />
-                        <strong>Céd:</strong> ${paciente.value?.cedula ?? ''}<br />
+                        <strong>Paciente:</strong> ${escapeHtml(nombrePaciente.toUpperCase())}<br />
+                        <strong>Céd:</strong> ${escapeHtml(paciente.value?.cedula)}<br />
                         <strong>Edad:</strong> ${edad}
                     </div>
                     <div class="col-derecha">
@@ -649,7 +665,7 @@ const imprimirDietaDoc = (dietaSeleccionada) => {
                 </div>
 
                 <div class="caja-contenido">
-                    <p>${dietaSeleccionada.dieta ?? ''}</p>
+                    <p>${escapeHtml(dietaSeleccionada.dieta)}</p>
                 </div>
             </body>
         </html>
@@ -852,12 +868,12 @@ const imprimirAutorizacion = (autorizacionSeleccionada) => {
             </head>
             <body>
                 <div class="header">
-                    ${branding.value.header_icon_left_url ? `<img src="${branding.value.header_icon_left_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
-                        <h2>${branding.value.brand_name ?? ''}</h2>
-                        <div class="parrafo">${branding.value.header_credentials ?? ''}</div>
+                        <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
-                    ${branding.value.header_icon_right_url ? `<img src="${branding.value.header_icon_right_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
                 </div>
 
                 <hr />
@@ -866,10 +882,10 @@ const imprimirAutorizacion = (autorizacionSeleccionada) => {
                     <div class="titulo">AUTORIZACIÓN DE PROCEDIMIENTOS</div>
                     <div class="datos-paciente">
                         <div class="col-paciente">
-                            <strong>Paciente:</strong> ${nombrePaciente.toUpperCase()}<br />
+                            <strong>Paciente:</strong> ${escapeHtml(nombrePaciente.toUpperCase())}<br />
                             <strong>Edad:</strong> ${edad}
                         </div>
-                        <div class="col-ars"><strong>ARS:</strong> ${ars}</div>
+                        <div class="col-ars"><strong>ARS:</strong> ${escapeHtml(ars)}</div>
                         <div class="col-fecha"><strong>Fecha:</strong> ${formatearFechaLegible(autorizacionSeleccionada.fecha)}</div>
                     </div>
                 </div>
@@ -877,23 +893,23 @@ const imprimirAutorizacion = (autorizacionSeleccionada) => {
                 <div class="caja-contenido">
                     <div class="campo">
                         <label>Historia detallada de la enfermedad actual:</label>
-                        <p>${autorizacionSeleccionada.historia_enfermedad ?? ''}</p>
+                        <p>${escapeHtml(autorizacionSeleccionada.historia_enfermedad)}</p>
                     </div>
                     <div class="campo">
                         <label>Estudios realizados:</label>
-                        <p>${autorizacionSeleccionada.estudios_realizados ?? ''}</p>
+                        <p>${escapeHtml(autorizacionSeleccionada.estudios_realizados)}</p>
                     </div>
                     <div class="campo">
                         <label>Tiempo de evolución de la enfermedad:</label>
-                        <p>${autorizacionSeleccionada.tiempo_evolucion ?? ''}</p>
+                        <p>${escapeHtml(autorizacionSeleccionada.tiempo_evolucion)}</p>
                     </div>
                     <div class="campo">
                         <label>Tratamiento(s) Previo(s):</label>
-                        <p>${autorizacionSeleccionada.tratamiento_previo ?? ''}</p>
+                        <p>${escapeHtml(autorizacionSeleccionada.tratamiento_previo)}</p>
                     </div>
                     <div class="campo">
                         <label>Diagnóstico presuntivo:</label>
-                        <p>${autorizacionSeleccionada.diagnostico_presuntivo ?? ''}</p>
+                        <p>${escapeHtml(autorizacionSeleccionada.diagnostico_presuntivo)}</p>
                     </div>
                 </div>
             </body>
@@ -1045,12 +1061,12 @@ const imprimirLicencia = (licenciaSeleccionada) => {
             </head>
             <body>
                 <div class="header">
-                    ${branding.value.header_icon_left_url ? `<img src="${branding.value.header_icon_left_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
-                        <h2>${branding.value.brand_name ?? ''}</h2>
-                        <div class="parrafo">${branding.value.header_credentials ?? ''}</div>
+                        <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
-                    ${branding.value.header_icon_right_url ? `<img src="${branding.value.header_icon_right_url}" alt="" />` : '<div></div>'}
+                    ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
                 </div>
 
                 <hr />
@@ -1059,16 +1075,16 @@ const imprimirLicencia = (licenciaSeleccionada) => {
 
                 <div class="caja-secciones">
                     <div class="seccion">
-                        <p>${declaracion} ${nombrePaciente.toUpperCase()}, Cédula de identidad y electoral No. ${paciente.value?.cedula ?? ''}, TITULAR.</p>
+                        <p>${escapeHtml(declaracion)} ${escapeHtml(nombrePaciente.toUpperCase())}, Cédula de identidad y electoral No. ${escapeHtml(paciente.value?.cedula)}, TITULAR.</p>
                     </div>
                     <div class="seccion">
-                        <p><strong>Y constatado:</strong> ${licenciaSeleccionada.constatado ?? ''}</p>
+                        <p><strong>Y constatado:</strong> ${escapeHtml(licenciaSeleccionada.constatado)}</p>
                     </div>
                     <div class="seccion">
-                        <p><strong>Por lo que recomiendo:</strong> ${licenciaSeleccionada.recomendacion ?? ''}</p>
+                        <p><strong>Por lo que recomiendo:</strong> ${escapeHtml(licenciaSeleccionada.recomendacion)}</p>
                     </div>
                     <div class="seccion">
-                        <p><strong>Expido la presente certificación en:</strong> ${licenciaSeleccionada.certificacion_cierre ?? ''}</p>
+                        <p><strong>Expido la presente certificación en:</strong> ${escapeHtml(licenciaSeleccionada.certificacion_cierre)}</p>
                     </div>
                 </div>
             </body>

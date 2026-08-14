@@ -591,7 +591,7 @@ onMounted(async () => {
                         <FileUpload
                             mode="basic"
                             name="logo"
-                            accept="image/png,image/jpeg,image/svg+xml"
+                            accept="image/png,image/jpeg"
                             :maxFileSize="2000000"
                             :auto="true"
                             chooseLabel="Cambiar logo"
@@ -610,7 +610,7 @@ onMounted(async () => {
                         <FileUpload
                             mode="basic"
                             name="icon"
-                            accept="image/png,image/jpeg,image/svg+xml"
+                            accept="image/png,image/jpeg"
                             :maxFileSize="2000000"
                             :auto="true"
                             chooseLabel="Cambiar ícono izquierdo"
@@ -629,7 +629,7 @@ onMounted(async () => {
                         <FileUpload
                             mode="basic"
                             name="icon"
-                            accept="image/png,image/jpeg,image/svg+xml"
+                            accept="image/png,image/jpeg"
                             :maxFileSize="2000000"
                             :auto="true"
                             chooseLabel="Cambiar ícono derecho"
