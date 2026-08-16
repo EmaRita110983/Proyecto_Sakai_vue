@@ -50,3 +50,17 @@ export async function funEliminarPaciente(id) {
     return response.data;
 
 }
+
+
+// Busca un paciente eliminado (soft delete) por cédula o pasaporte, para
+// consultar su ficha e historial de solo lectura aunque ya no aparezca en
+// el listado normal.
+export async function funBuscarPacienteEliminado(documento) {
+
+    const response = await api.get('/v1/patients/eliminados/buscar', {
+        params: { documento }
+    });
+
+    return response.data;
+
+}

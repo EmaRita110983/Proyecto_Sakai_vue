@@ -53,3 +53,17 @@ export async function funEliminar(id) {
     return response.data;
 
 }
+
+
+// Busca un usuario (médico o secretaria) eliminado (soft delete) por cédula,
+// para consultar sus datos de solo lectura aunque ya no aparezca en el
+// listado normal.
+export async function funBuscarUsuarioEliminado(documento) {
+
+    const response = await api.get('/v1/users/eliminados/buscar', {
+        params: { documento }
+    });
+
+    return response.data;
+
+}

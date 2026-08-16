@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar } from '@/service/usuario.service';
+import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar, funBuscarUsuarioEliminado } from '@/service/usuario.service';
 import { funObtenerBrandingUsuario, funActualizarBrandingUsuario, funSubirLogoUsuario, funSubirHeaderIconoUsuario } from '@/service/tenant.service';
 import { usuariosFilterResetSignal } from '@/composables/useUsuariosFilter';
 import Toast from 'primevue/toast';
@@ -66,6 +66,45 @@ const filters = ref({
 watch(usuariosFilterResetSignal, () => {
     filters.value.global.value = null;
 });
+
+// ============ Buscar usuario eliminado (soft delete) ============
+// El filtro de arriba solo busca entre los usuarios activos (los eliminados
+// no vienen en `usuarios`). Si no hay ninguno activo que coincida, se
+// consulta al backend por si la cédula pertenece a una secretaria/médico
+// eliminado, para poder consultarlo (de solo lectura, no se reactiva acá).
+const usuarioEliminadoEncontrado = ref(null);
+
+const usuariosVisibles = computed(() => (usuarioEliminadoEncontrado.value ? [...usuarios.value, usuarioEliminadoEncontrado.value] : usuarios.value));
+
+watch(
+    () => filters.value.global.value,
+    () => {
+        usuarioEliminadoEncontrado.value = null;
+    }
+);
+
+const buscarUsuario = async () => {
+    const termino = (filters.value.global.value || '').trim();
+
+    if (!termino) {
+        return;
+    }
+
+    const hayActivoCoincidente = usuarios.value.some((u) => u.cedula === termino);
+
+    if (hayActivoCoincidente) {
+        return;
+    }
+
+    try {
+        const encontrado = await funBuscarUsuarioEliminado(termino);
+        usuarioEliminadoEncontrado.value = { ...encontrado, eliminado: true };
+    } catch (error) {
+        if (error.response?.status !== 404) {
+            console.error(error);
+        }
+    }
+};
 
 const actualizarUsuario = async () => {
     try {
@@ -177,6 +216,33 @@ const eliminarUsuario = (usuario) => {
             }
         }
     });
+};
+
+const credencialesDialogVisible = ref(false);
+const credencialesGeneradas = ref({ email: '', password: '' });
+
+const copiarCredenciales = async () => {
+    const texto = `Email: ${credencialesGeneradas.value.email}\nPassword: ${credencialesGeneradas.value.password}`;
+
+    try {
+        await navigator.clipboard.writeText(texto);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Copiado',
+            detail: 'Las credenciales se copiaron al portapapeles',
+            life: 2500
+        });
+    } catch (error) {
+        console.error(error);
+
+        toast.add({
+            severity: 'error',
+            summary: 'No se pudo copiar',
+            detail: 'Copia las credenciales manualmente',
+            life: 3000
+        });
+    }
 };
 
 const brandingDialogVisible = ref(false);
@@ -367,7 +433,7 @@ const nuevoUsuario = () => {
 // Función para guardar usuario
 const guardarUsuario = async () => {
     try {
-        await funGuardar(usuario.value);
+        const data = await funGuardar(usuario.value);
 
         toast.add({
             severity: 'success',
@@ -377,6 +443,17 @@ const guardarUsuario = async () => {
         });
 
         visibleDialog.value = false;
+
+        // Solo viene presente al crear un médico (ver UserController::store):
+        // el password real nunca se guarda en la BD, así que este es el único
+        // momento donde el superadmin puede verlo para entregárselo.
+        if (data.password_generica) {
+            credencialesGeneradas.value = {
+                email: data.usuario.email,
+                password: data.password_generica
+            };
+            credencialesDialogVisible.value = true;
+        }
 
         usuarios.value = await funListar();
 
@@ -468,11 +545,12 @@ onMounted(async () => {
         <div class="flex justify-end mb-4">
             <IconField>
                 <InputIcon class="pi pi-search" />
-                <InputText v-model="filters.global.value" placeholder="Buscar por cédula..." autocomplete="off" />
+                <InputText v-model="filters.global.value" placeholder="Buscar por cédula..." autocomplete="off" @keyup.enter="buscarUsuario()" />
             </IconField>
+            <Button icon="pi pi-arrow-right" class="ml-2" @click="buscarUsuario()" />
         </div>
 
-        <DataTable :value="usuarios" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll" size="small">
+        <DataTable :value="usuariosVisibles" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll" size="small">
             <Column field="id" header="ID"></Column>
             <Column field="name" header="Nombre"></Column>
             <Column field="email" header="Email"></Column>
@@ -484,13 +562,14 @@ onMounted(async () => {
             </Column>
             <Column header="Estado">
                 <template #body="slotProps">
-                    <span v-if="slotProps.data.status" class="pill pill-good">Activo</span>
+                    <span v-if="slotProps.data.eliminado" class="pill pill-critical">Eliminado</span>
+                    <span v-else-if="slotProps.data.status" class="pill pill-good">Activo</span>
                     <span v-else class="pill pill-critical">Inactivo</span>
                 </template>
             </Column>
             <Column header="Acciones" bodyStyle="white-space: nowrap">
     <template #body="slotProps">
-        <div class="flex gap-2">
+        <div v-if="!slotProps.data.eliminado" class="flex gap-2">
             <Button icon="pi pi-pencil" rounded size="small" @click="editarUsuario(slotProps.data)" />
             <Button v-if="slotProps.data.status" icon="pi pi-ban" severity="danger" rounded size="small" @click="desactivarUsuario(slotProps.data)" />
             <Button v-else icon="pi pi-check" severity="success" rounded size="small" @click="activarUsuario(slotProps.data)" />
@@ -500,9 +579,13 @@ onMounted(async () => {
     </template>
 </Column>
 
+            <template #empty>
+                <span v-if="filters.global.value">Cédula inválida. Coloque una cédula válida.</span>
+                <span v-else>No hay {{ esSuperAdmin ? 'usuarios' : 'secretarias' }} registrados.</span>
+            </template>
         </DataTable>
 
-        <Dialog v-model:visible="visibleDialog" :header="editando ? 'Editar Usuario' : 'Nuevo Usuario'" :modal="true" :style="{ width: '450px' }">
+        <Dialog v-model:visible="visibleDialog" :header="editando ? 'Editar Usuario' : 'Nuevo Usuario'" :modal="true" :style="{ width: '450px' }" :breakpoints="{ '576px': '90vw' }">
             <div class="flex flex-col gap-3">
                 <FloatLabel>
                     <InputText id="name" v-model="usuario.name" />
@@ -541,19 +624,43 @@ onMounted(async () => {
                     <small v-if="errores.admin_id" class="text-red-500">{{ errores.admin_id[0] }}</small>
                 </template>
 
-                <FloatLabel>
-                    <InputText id="password" v-model="usuario.password" />
-                    <label for="password">Password</label>
-                </FloatLabel>
-                <small v-if="errores.password" class="text-red-500">
-                    {{ errores.password[0] }}
-                </small>
+                <template v-if="editando || usuario.role !== 'admin'">
+                    <FloatLabel>
+                        <InputText id="password" v-model="usuario.password" />
+                        <label for="password">Password</label>
+                    </FloatLabel>
+                    <small v-if="errores.password" class="text-red-500">
+                        {{ errores.password[0] }}
+                    </small>
+                </template>
+                <small v-else class="text-surface-500"> Se le asignará una contraseña genérica. El médico deberá cambiarla obligatoriamente en su primer inicio de sesión. </small>
             </div>
 
             <template #footer>
                 <Button label="Cancelar" severity="secondary" @click="visibleDialog = false" />
 
                 <Button :label="editando ? 'Actualizar' : 'Guardar'" icon="pi pi-check" @click="editando ? actualizarUsuario() : guardarUsuario()" />
+            </template>
+        </Dialog>
+
+        <Dialog v-model:visible="credencialesDialogVisible" header="Credenciales del médico" :modal="true" :closable="false" :style="{ width: '450px' }" :breakpoints="{ '576px': '90vw' }">
+            <div class="flex flex-col gap-3">
+                <small class="text-surface-500"> Entrégale estos datos al médico. Deberá cambiar la contraseña obligatoriamente en su primer inicio de sesión. </small>
+
+                <div class="flex flex-col gap-1">
+                    <span class="text-sm font-semibold">Email</span>
+                    <span class="text-tabular">{{ credencialesGeneradas.email }}</span>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <span class="text-sm font-semibold">Password</span>
+                    <span class="text-tabular">{{ credencialesGeneradas.password }}</span>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Copiar" icon="pi pi-copy" severity="secondary" @click="copiarCredenciales" />
+                <Button label="Entendido" icon="pi pi-check" @click="credencialesDialogVisible = false" />
             </template>
         </Dialog>
 
@@ -585,7 +692,7 @@ onMounted(async () => {
 
                 <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold">Logo (topbar de la aplicación)</label>
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-4 flex-wrap">
                         <img v-if="brandingForm.logo_url" :src="brandingForm.logo_url" alt="Logo actual" style="height: 3rem; width: auto" />
 
                         <FileUpload
@@ -604,7 +711,7 @@ onMounted(async () => {
 
                 <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold">Ícono izquierdo del encabezado (documentos)</label>
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-4 flex-wrap">
                         <img v-if="brandingForm.header_icon_left_url" :src="brandingForm.header_icon_left_url" alt="Ícono izquierdo actual" style="height: 3rem; width: auto" />
 
                         <FileUpload
@@ -623,7 +730,7 @@ onMounted(async () => {
 
                 <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold">Ícono derecho del encabezado (documentos)</label>
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-4 flex-wrap">
                         <img v-if="brandingForm.header_icon_right_url" :src="brandingForm.header_icon_right_url" alt="Ícono derecho actual" style="height: 3rem; width: auto" />
 
                         <FileUpload

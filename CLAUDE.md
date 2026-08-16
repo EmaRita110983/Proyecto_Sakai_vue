@@ -1,6 +1,6 @@
 # Frontend — SaaS Médico Multi-tenant (Sakai Vue)
 
-SPA en Vue 3 + Vite, basada en el template admin **Sakai** (PrimeVue 4 + Tailwind). Consume la API del backend Laravel en `/Users/howard/Desktop/backend_inv_cv_laravel` vía Axios.
+SPA en Vue 3 + Vite, basada en el template admin **Sakai** (PrimeVue 4 + Tailwind). Consume la API del backend Laravel en `/Users/howard/Desktop/proyecto 1/backend_inv_cv_laravel` vía Axios.
 
 ## Stack
 

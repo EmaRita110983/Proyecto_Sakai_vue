@@ -1,12 +1,13 @@
 <script setup>
 import { onMounted, ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { funObtenerPaciente, funListarPacientes } from '@/service/patient.service';
+import { funObtenerPaciente, funListarPacientes, funBuscarPacienteEliminado } from '@/service/patient.service';
 import { funListarHistorial, funGuardarHistorial, funActualizarHistorial, funEliminarHistorial } from '@/service/historial.service';
 import { funListarRecetas, funGuardarReceta, funActualizarReceta, funEliminarReceta } from '@/service/receta.service';
 import { funListarAutorizaciones, funGuardarAutorizacion, funActualizarAutorizacion, funEliminarAutorizacion } from '@/service/autorizacion.service';
 import { funListarLicencias, funGuardarLicencia, funActualizarLicencia, funEliminarLicencia } from '@/service/licencia.service';
 import { funListarDietas, funGuardarDieta, funActualizarDieta, funEliminarDieta } from '@/service/dieta.service';
+import { funListarEstudios, funGuardarEstudio, funActualizarEstudio, funEliminarEstudio } from '@/service/estudio.service';
 import { getUser } from '@/service/auth.service';
 import { useBranding } from '@/composables/useBranding';
 import Toast from 'primevue/toast';
@@ -22,6 +23,7 @@ import Column from 'primevue/column';
 import DatePicker from 'primevue/datepicker';
 import Textarea from 'primevue/textarea';
 import Select from 'primevue/select';
+import FileUpload from 'primevue/fileupload';
 import Tabs from 'primevue/tabs';
 import TabList from 'primevue/tablist';
 import Tab from 'primevue/tab';
@@ -44,6 +46,13 @@ const confirm = useConfirm();
 const patientId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const paciente = ref(null);
 
+// Un paciente eliminado (soft delete) igual se puede consultar por cédula o
+// pasaporte (ver buscarPorCedula) para ver su ficha e historial completo,
+// pero de solo lectura: no se puede crear/editar/eliminar nada mientras esté
+// en este estado (ver PatientPolicy::restore(), siempre false — no se
+// reactiva desde acá).
+const esEliminado = computed(() => !!paciente.value?.deleted_at);
+
 const { branding, cargarBranding } = useBranding();
 
 // Solo el médico (admin) puede eliminar; superadmin y médico pueden crear/editar.
@@ -60,11 +69,24 @@ const buscarPorCedula = async () => {
     }
 
     try {
+        const valor = busquedaCedula.value.trim();
         const pacientes = await funListarPacientes();
-        const encontrado = pacientes.find((p) => p.cedula === busquedaCedula.value.trim());
+        let encontrado = pacientes.find((p) => p.cedula === valor || p.pasaporte === valor);
+
+        // No está entre los activos: puede ser un paciente eliminado (soft
+        // delete). Se consulta aparte para poder verlo de solo lectura.
+        if (!encontrado) {
+            try {
+                encontrado = await funBuscarPacienteEliminado(valor);
+            } catch (error) {
+                if (error.response?.status !== 404) {
+                    console.error(error);
+                }
+            }
+        }
 
         if (!encontrado) {
-            toast.add({ severity: 'warn', summary: 'No encontrado', detail: 'Ningún paciente tiene esa cédula', life: 3000 });
+            toast.add({ severity: 'warn', summary: 'Cédula o pasaporte inválido', detail: 'Coloque una cédula o un pasaporte válido', life: 3000 });
             return;
         }
 
@@ -676,6 +698,159 @@ const imprimirDietaDoc = (dietaSeleccionada) => {
     ventana.print();
 };
 
+// ============ Estudios médicos ============
+// A diferencia de los demás documentos, esto son archivos (imagen o PDF)
+// subidos por el usuario, no texto armado por la app — no hay "imprimir con
+// membrete", el archivo se ve/descarga tal cual se subió.
+const estudios = ref([]);
+const visibleEstudioDialog = ref(false);
+const editandoEstudio = ref(false);
+const archivoEstudio = ref(null);
+const subiendoEstudio = ref(false);
+
+const tiposEstudio = [
+    { label: 'Sonografía', value: 'sonografia' },
+    { label: 'Rayos X', value: 'rayos_x' },
+    { label: 'Tomografía', value: 'tomografia' },
+    { label: 'Resonancia', value: 'resonancia' },
+    { label: 'Análisis de laboratorio', value: 'laboratorio' },
+    { label: 'Otro', value: 'otro' }
+];
+
+const estudioVacio = {
+    id: null,
+    tipo: null,
+    fecha_estudio: null,
+    descripcion: '',
+    historial_medico_id: null
+};
+
+const estudio = ref({ ...estudioVacio });
+
+const etiquetaTipoEstudio = (tipo) => tiposEstudio.find((t) => t.value === tipo)?.label ?? tipo;
+
+const cargarEstudios = async () => {
+    estudios.value = await funListarEstudios(patientId.value);
+};
+
+const nuevoEstudio = () => {
+    errores.value = {};
+    editandoEstudio.value = false;
+    estudio.value = { ...estudioVacio, fecha_estudio: new Date() };
+    archivoEstudio.value = null;
+    visibleEstudioDialog.value = true;
+};
+
+const editarEstudio = (estudioSeleccionado) => {
+    errores.value = {};
+    editandoEstudio.value = true;
+    estudio.value = {
+        id: estudioSeleccionado.id,
+        tipo: estudioSeleccionado.tipo,
+        fecha_estudio: parsearFecha(estudioSeleccionado.fecha_estudio),
+        descripcion: estudioSeleccionado.descripcion,
+        historial_medico_id: estudioSeleccionado.historial_medico_id
+    };
+    archivoEstudio.value = null;
+    visibleEstudioDialog.value = true;
+};
+
+const seleccionarArchivoEstudio = (event) => {
+    archivoEstudio.value = event.files?.[0] ?? null;
+};
+
+const guardarEstudio = async () => {
+    try {
+        subiendoEstudio.value = true;
+
+        if (editandoEstudio.value) {
+            // Solo metadatos: para reemplazar el archivo se sube un estudio nuevo.
+            await funActualizarEstudio(estudio.value.id, {
+                tipo: estudio.value.tipo,
+                fecha_estudio: estudio.value.fecha_estudio ? formatearFecha(estudio.value.fecha_estudio) : null,
+                descripcion: estudio.value.descripcion,
+                historial_medico_id: estudio.value.historial_medico_id
+            });
+        } else {
+            if (!archivoEstudio.value) {
+                toast.add({ severity: 'warn', summary: 'Falta el archivo', detail: 'Selecciona una imagen o PDF para subir', life: 3000 });
+                return;
+            }
+
+            await funGuardarEstudio({
+                patient_id: patientId.value,
+                tipo: estudio.value.tipo,
+                fecha_estudio: estudio.value.fecha_estudio ? formatearFecha(estudio.value.fecha_estudio) : null,
+                descripcion: estudio.value.descripcion,
+                historial_medico_id: estudio.value.historial_medico_id,
+                archivo: archivoEstudio.value
+            });
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: editandoEstudio.value ? 'Estudio actualizado' : 'Estudio subido',
+            detail: 'Los datos fueron guardados correctamente',
+            life: 3000
+        });
+
+        visibleEstudioDialog.value = false;
+        await cargarEstudios();
+    } catch (error) {
+        console.error(error);
+
+        if (error.response?.status === 422) {
+            errores.value = error.response.data.errors ?? {};
+        }
+
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.response?.data?.message ?? 'Ocurrió un error inesperado',
+            life: 3000
+        });
+    } finally {
+        subiendoEstudio.value = false;
+    }
+};
+
+const verEstudio = (estudioSeleccionado) => {
+    window.open(estudioSeleccionado.archivo_url, '_blank');
+};
+
+const eliminarEstudio = (estudioSeleccionado) => {
+    confirm.require({
+        message: '¿Desea eliminar este estudio médico?',
+        header: 'Confirmar eliminación',
+        acceptLabel: 'Eliminar',
+        rejectLabel: 'Cancelar',
+        acceptClass: 'p-button-danger',
+
+        accept: async () => {
+            try {
+                await funEliminarEstudio(estudioSeleccionado.id);
+                await cargarEstudios();
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Estudio eliminado',
+                    detail: 'El estudio fue eliminado correctamente',
+                    life: 3000
+                });
+            } catch (error) {
+                console.error(error);
+
+                toast.add({
+                    severity: 'error',
+                    summary: 'No autorizado',
+                    detail: error.response?.data?.message ?? 'Ocurrió un error inesperado',
+                    life: 3000
+                });
+            }
+        }
+    });
+};
+
 // ============ Autorización de procedimientos ============
 const autorizaciones = ref([]);
 const visibleAutorizacionDialog = ref(false);
@@ -1108,7 +1283,7 @@ const cargarPaciente = async () => {
 
     try {
         paciente.value = await funObtenerPaciente(patientId.value);
-        await Promise.all([cargarHistorial(), cargarRecetas(), cargarDietas(), cargarAutorizaciones(), cargarLicencias()]);
+        await Promise.all([cargarHistorial(), cargarRecetas(), cargarDietas(), cargarEstudios(), cargarAutorizaciones(), cargarLicencias()]);
     } catch (error) {
         console.error(error);
 
@@ -1151,7 +1326,7 @@ onMounted(async () => {
             <template #end>
                 <IconField>
                     <InputIcon class="pi pi-search" />
-                    <InputText v-model="busquedaCedula" placeholder="Buscar paciente por cédula..." autocomplete="off" @keyup.enter="buscarPorCedula()" />
+                    <InputText v-model="busquedaCedula" placeholder="Buscar paciente por cédula o pasaporte..." autocomplete="off" @keyup.enter="buscarPorCedula()" />
                 </IconField>
                 <Button icon="pi pi-arrow-right" class="ml-2" @click="buscarPorCedula()" />
             </template>
@@ -1161,7 +1336,10 @@ onMounted(async () => {
             <div class="who">
                 <div class="initials">{{ paciente.first_name?.[0] }}{{ paciente.last_name?.[0] }}</div>
                 <div>
-                    <h3>{{ paciente.first_name }} {{ paciente.last_name }}</h3>
+                    <h3>
+                        {{ paciente.first_name }} {{ paciente.last_name }}
+                        <span v-if="esEliminado" class="pill pill-critical ml-2">Eliminado</span>
+                    </h3>
                     <p>CI {{ paciente.cedula }}</p>
                 </div>
             </div>
@@ -1177,7 +1355,9 @@ onMounted(async () => {
             </div>
         </div>
 
-        <div v-else class="card flex flex-col items-center gap-2 text-center" style="padding: 3rem 1.5rem">
+        <small v-if="esEliminado" class="text-surface-500 block mb-4"> Este paciente fue eliminado. Los datos se muestran de solo lectura: no se puede crear, editar ni eliminar nada mientras esté en este estado. </small>
+
+        <div v-if="!paciente" class="card flex flex-col items-center gap-2 text-center" style="padding: 3rem 1.5rem">
             <i class="pi pi-search" style="font-size: 1.75rem; color: var(--ink-faint)"></i>
             <p class="m-0 font-display" style="font-size: 1.05rem">Busca un paciente para ver su historial</p>
             <small class="text-surface-500">Escribe su cédula arriba a la derecha y presiona Enter, o el botón de flecha.</small>
@@ -1188,6 +1368,7 @@ onMounted(async () => {
                 <Tab value="consultas">Consultas</Tab>
                 <Tab value="recetas">Recetas</Tab>
                 <Tab value="dieta">Dieta</Tab>
+                <Tab value="estudios">Estudios médicos</Tab>
                 <Tab value="autorizacion">Autorización seguro médico</Tab>
                 <Tab value="licencia">Licencia médica</Tab>
             </TabList>
@@ -1200,122 +1381,160 @@ onMounted(async () => {
                             <DatePicker id="filtroFecha" v-model="filtroFecha" dateFormat="dd/mm/yy" showIcon iconDisplay="input" showButtonBar />
                             <label for="filtroFecha">Filtrar por fecha</label>
                         </FloatLabel>
-                        <Button label="Nueva consulta" icon="pi pi-plus" outlined @click="nuevaEntradaHistorial()" />
+                        <Button v-if="!esEliminado" label="Nueva consulta" icon="pi pi-plus" outlined @click="nuevaEntradaHistorial()" />
                     </div>
 
-                    <DataTable :value="historialFiltrado" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%">
-                        <Column header="Fecha" bodyClass="text-tabular">
-                            <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha_consulta) }}</template>
-                        </Column>
-                        <Column field="motivo_consulta" header="Motivo"></Column>
-                        <Column field="diagnostico" header="Diagnóstico"></Column>
-                        <Column field="tratamiento" header="Tratamiento"></Column>
-                        <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
-                            <template #body="slotProps">
-                                <div class="flex gap-2">
-                                    <Button icon="pi pi-pencil" rounded size="small" @click="editarEntradaHistorial(slotProps.data)" />
-                                    <Button icon="pi pi-print" rounded size="small" @click="imprimirHistorial(slotProps.data)" v-tooltip.top="'Imprimir historial'" />
-                                    <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarEntradaHistorial(slotProps.data)" />
-                                </div>
-                            </template>
-                        </Column>
-                    </DataTable>
+                    <div class="table-responsive">
+                        <DataTable :value="historialFiltrado" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%; min-width: 46rem" class="table-fixed-layout">
+                            <Column header="Fecha" bodyClass="text-tabular">
+                                <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha_consulta) }}</template>
+                            </Column>
+                            <Column field="motivo_consulta" header="Motivo"></Column>
+                            <Column field="diagnostico" header="Diagnóstico"></Column>
+                            <Column field="tratamiento" header="Tratamiento"></Column>
+                            <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
+                                <template #body="slotProps">
+                                    <div class="flex gap-2">
+                                        <Button v-if="!esEliminado" icon="pi pi-pencil" rounded size="small" @click="editarEntradaHistorial(slotProps.data)" />
+                                        <Button icon="pi pi-print" rounded size="small" @click="imprimirHistorial(slotProps.data)" v-tooltip.top="'Imprimir historial'" />
+                                        <Button v-if="esMedico && !esEliminado" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarEntradaHistorial(slotProps.data)" />
+                                    </div>
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
                 </TabPanel>
 
                 <!-- Recetas -->
                 <TabPanel value="recetas">
                     <div class="flex justify-end mb-3 mt-2">
-                        <Button label="Nueva receta" icon="pi pi-plus" outlined @click="nuevaReceta()" />
+                        <Button v-if="!esEliminado" label="Nueva receta" icon="pi pi-plus" outlined @click="nuevaReceta()" />
                     </div>
 
-                    <DataTable :value="recetas" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%">
-                        <Column header="Fecha" bodyClass="text-tabular">
-                            <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha_emision) }}</template>
-                        </Column>
-                        <Column field="ars" header="ARS"></Column>
-                        <Column field="medicamentos" header="Medicamentos"></Column>
-                        <Column field="indicaciones" header="Indicaciones"></Column>
-                        <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
-                            <template #body="slotProps">
-                                <div class="flex gap-2">
-                                    <Button icon="pi pi-pencil" rounded size="small" @click="editarReceta(slotProps.data)" />
-                                    <Button icon="pi pi-print" rounded size="small" @click="imprimirReceta(slotProps.data)" v-tooltip.top="'Imprimir receta'" />
-                                    <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarReceta(slotProps.data)" />
-                                </div>
-                            </template>
-                        </Column>
-                    </DataTable>
+                    <div class="table-responsive">
+                        <DataTable :value="recetas" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%; min-width: 46rem" class="table-fixed-layout">
+                            <Column header="Fecha" bodyClass="text-tabular">
+                                <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha_emision) }}</template>
+                            </Column>
+                            <Column field="ars" header="ARS"></Column>
+                            <Column field="medicamentos" header="Medicamentos"></Column>
+                            <Column field="indicaciones" header="Indicaciones"></Column>
+                            <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
+                                <template #body="slotProps">
+                                    <div class="flex gap-2">
+                                        <Button v-if="!esEliminado" icon="pi pi-pencil" rounded size="small" @click="editarReceta(slotProps.data)" />
+                                        <Button icon="pi pi-print" rounded size="small" @click="imprimirReceta(slotProps.data)" v-tooltip.top="'Imprimir receta'" />
+                                        <Button v-if="esMedico && !esEliminado" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarReceta(slotProps.data)" />
+                                    </div>
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
                 </TabPanel>
 
                 <!-- Dieta -->
                 <TabPanel value="dieta">
                     <div class="flex justify-end mb-3 mt-2">
-                        <Button label="Nueva dieta" icon="pi pi-plus" outlined @click="nuevaDieta()" />
+                        <Button v-if="!esEliminado" label="Nueva dieta" icon="pi pi-plus" outlined @click="nuevaDieta()" />
                     </div>
 
-                    <DataTable :value="dietas" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%">
-                        <Column header="Fecha" bodyClass="text-tabular">
-                            <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha) }}</template>
-                        </Column>
-                        <Column field="dieta" header="Dieta indicada"></Column>
-                        <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
-                            <template #body="slotProps">
-                                <div class="flex gap-2">
-                                    <Button icon="pi pi-pencil" rounded size="small" @click="editarDieta(slotProps.data)" />
-                                    <Button icon="pi pi-print" rounded size="small" @click="imprimirDietaDoc(slotProps.data)" v-tooltip.top="'Imprimir dieta'" />
-                                    <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarDieta(slotProps.data)" />
-                                </div>
-                            </template>
-                        </Column>
-                    </DataTable>
+                    <div class="table-responsive">
+                        <DataTable :value="dietas" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%; min-width: 34rem" class="table-fixed-layout">
+                            <Column header="Fecha" bodyClass="text-tabular">
+                                <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha) }}</template>
+                            </Column>
+                            <Column field="dieta" header="Dieta indicada"></Column>
+                            <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
+                                <template #body="slotProps">
+                                    <div class="flex gap-2">
+                                        <Button v-if="!esEliminado" icon="pi pi-pencil" rounded size="small" @click="editarDieta(slotProps.data)" />
+                                        <Button icon="pi pi-print" rounded size="small" @click="imprimirDietaDoc(slotProps.data)" v-tooltip.top="'Imprimir dieta'" />
+                                        <Button v-if="esMedico && !esEliminado" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarDieta(slotProps.data)" />
+                                    </div>
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
+                </TabPanel>
+
+                <!-- Estudios médicos -->
+                <TabPanel value="estudios">
+                    <div class="flex justify-end mb-3 mt-2">
+                        <Button v-if="!esEliminado" label="Nuevo estudio" icon="pi pi-plus" outlined @click="nuevoEstudio()" />
+                    </div>
+
+                    <div class="table-responsive">
+                        <DataTable :value="estudios" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%; min-width: 42rem" class="table-fixed-layout">
+                            <Column header="Fecha" bodyClass="text-tabular">
+                                <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha_estudio) }}</template>
+                            </Column>
+                            <Column header="Tipo">
+                                <template #body="slotProps"><span class="pill pill-neutral">{{ etiquetaTipoEstudio(slotProps.data.tipo) }}</span></template>
+                            </Column>
+                            <Column field="descripcion" header="Descripción"></Column>
+                            <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
+                                <template #body="slotProps">
+                                    <div class="flex gap-2">
+                                        <Button icon="pi pi-eye" rounded size="small" @click="verEstudio(slotProps.data)" v-tooltip.top="'Ver / descargar'" />
+                                        <Button v-if="!esEliminado" icon="pi pi-pencil" rounded size="small" @click="editarEstudio(slotProps.data)" />
+                                        <Button v-if="esMedico && !esEliminado" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarEstudio(slotProps.data)" />
+                                    </div>
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
                 </TabPanel>
 
                 <!-- Autorización de procedimientos -->
                 <TabPanel value="autorizacion">
                     <div class="flex justify-end mb-3 mt-2">
-                        <Button label="Nueva autorización" icon="pi pi-plus" outlined @click="nuevaAutorizacion()" />
+                        <Button v-if="!esEliminado" label="Nueva autorización" icon="pi pi-plus" outlined @click="nuevaAutorizacion()" />
                     </div>
 
-                    <DataTable :value="autorizaciones" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%">
-                        <Column header="Fecha" bodyClass="text-tabular">
-                            <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha) }}</template>
-                        </Column>
-                        <Column field="ars" header="ARS"></Column>
-                        <Column field="diagnostico_presuntivo" header="Diagnóstico presuntivo"></Column>
-                        <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
-                            <template #body="slotProps">
-                                <div class="flex gap-2">
-                                    <Button icon="pi pi-pencil" rounded size="small" @click="editarAutorizacion(slotProps.data)" />
-                                    <Button icon="pi pi-print" rounded size="small" @click="imprimirAutorizacion(slotProps.data)" v-tooltip.top="'Imprimir autorización'" />
-                                    <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarAutorizacion(slotProps.data)" />
-                                </div>
-                            </template>
-                        </Column>
-                    </DataTable>
+                    <div class="table-responsive">
+                        <DataTable :value="autorizaciones" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%; min-width: 44rem" class="table-fixed-layout">
+                            <Column header="Fecha" bodyClass="text-tabular">
+                                <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha) }}</template>
+                            </Column>
+                            <Column field="ars" header="ARS"></Column>
+                            <Column field="diagnostico_presuntivo" header="Diagnóstico presuntivo"></Column>
+                            <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
+                                <template #body="slotProps">
+                                    <div class="flex gap-2">
+                                        <Button v-if="!esEliminado" icon="pi pi-pencil" rounded size="small" @click="editarAutorizacion(slotProps.data)" />
+                                        <Button icon="pi pi-print" rounded size="small" @click="imprimirAutorizacion(slotProps.data)" v-tooltip.top="'Imprimir autorización'" />
+                                        <Button v-if="esMedico && !esEliminado" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarAutorizacion(slotProps.data)" />
+                                    </div>
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
                 </TabPanel>
 
                 <!-- Licencia médica -->
                 <TabPanel value="licencia">
                     <div class="flex justify-end mb-3 mt-2">
-                        <Button label="Nueva licencia" icon="pi pi-plus" outlined @click="nuevaLicencia()" />
+                        <Button v-if="!esEliminado" label="Nueva licencia" icon="pi pi-plus" outlined @click="nuevaLicencia()" />
                     </div>
 
-                    <DataTable :value="licencias" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%">
-                        <Column header="Fecha" bodyClass="text-tabular">
-                            <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha) }}</template>
-                        </Column>
-                        <Column field="constatado" header="Y constatado"></Column>
-                        <Column field="recomendacion" header="Recomendación"></Column>
-                        <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
-                            <template #body="slotProps">
-                                <div class="flex gap-2">
-                                    <Button icon="pi pi-pencil" rounded size="small" @click="editarLicencia(slotProps.data)" />
-                                    <Button icon="pi pi-print" rounded size="small" @click="imprimirLicencia(slotProps.data)" v-tooltip.top="'Imprimir licencia'" />
-                                    <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarLicencia(slotProps.data)" />
-                                </div>
-                            </template>
-                        </Column>
-                    </DataTable>
+                    <div class="table-responsive">
+                        <DataTable :value="licencias" paginator :rows="5" stripedRows showGridlines size="small" tableStyle="table-layout: fixed; width: 100%; min-width: 42rem" class="table-fixed-layout">
+                            <Column header="Fecha" bodyClass="text-tabular">
+                                <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha) }}</template>
+                            </Column>
+                            <Column field="constatado" header="Y constatado"></Column>
+                            <Column field="recomendacion" header="Recomendación"></Column>
+                            <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
+                                <template #body="slotProps">
+                                    <div class="flex gap-2">
+                                        <Button v-if="!esEliminado" icon="pi pi-pencil" rounded size="small" @click="editarLicencia(slotProps.data)" />
+                                        <Button icon="pi pi-print" rounded size="small" @click="imprimirLicencia(slotProps.data)" v-tooltip.top="'Imprimir licencia'" />
+                                        <Button v-if="esMedico && !esEliminado" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarLicencia(slotProps.data)" />
+                                    </div>
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
                 </TabPanel>
             </TabPanels>
         </Tabs>
@@ -1425,6 +1644,55 @@ onMounted(async () => {
             <template #footer>
                 <Button label="Cancelar" severity="secondary" @click="visibleDietaDialog = false" />
                 <Button :label="editandoDieta ? 'Actualizar' : 'Guardar'" icon="pi pi-check" @click="guardarDieta()" />
+            </template>
+        </Dialog>
+
+        <!-- Dialog: estudio médico -->
+        <Dialog v-model:visible="visibleEstudioDialog" :header="editandoEstudio ? 'Editar estudio' : 'Nuevo estudio médico'" :modal="true" :style="{ width: '650px' }" :breakpoints="{ '960px': '90vw' }">
+            <div class="flex flex-col gap-3 pt-2">
+                <div class="flex flex-col gap-1 w-full">
+                    <label for="tipo_estudio" class="text-sm text-surface-600">Tipo de estudio</label>
+                    <Select id="tipo_estudio" v-model="estudio.tipo" :options="tiposEstudio" optionLabel="label" optionValue="value" placeholder="Selecciona un tipo" class="w-full" />
+                </div>
+                <small v-if="errores.tipo" class="text-red-500">{{ errores.tipo[0] }}</small>
+
+                <FloatLabel class="w-full">
+                    <DatePicker id="fecha_estudio" v-model="estudio.fecha_estudio" class="w-full" dateFormat="dd/mm/yy" showIcon iconDisplay="input" />
+                    <label for="fecha_estudio">Fecha del estudio</label>
+                </FloatLabel>
+                <small v-if="errores.fecha_estudio" class="text-red-500">{{ errores.fecha_estudio[0] }}</small>
+
+                <div class="flex flex-col gap-1 w-full">
+                    <label for="historial_estudio" class="text-sm text-surface-600">Consulta relacionada (opcional)</label>
+                    <Select
+                        id="historial_estudio"
+                        v-model="estudio.historial_medico_id"
+                        :options="opcionesHistorial"
+                        optionLabel="label"
+                        optionValue="value"
+                        showClear
+                        class="w-full"
+                        :placeholder="opcionesHistorial.length ? 'Selecciona una consulta' : 'Este paciente aún no tiene consultas registradas'"
+                        :disabled="!opcionesHistorial.length"
+                    />
+                </div>
+
+                <FloatLabel class="w-full">
+                    <Textarea id="descripcion_estudio" v-model="estudio.descripcion" class="w-full" rows="2" autoResize />
+                    <label for="descripcion_estudio">Descripción (opcional)</label>
+                </FloatLabel>
+
+                <div v-if="!editandoEstudio" class="flex flex-col gap-2">
+                    <label class="text-sm text-surface-600">Archivo (imagen o PDF, máx. 10MB)</label>
+                    <FileUpload mode="basic" name="archivo" accept="image/png,image/jpeg,application/pdf" :maxFileSize="10485760" chooseLabel="Seleccionar archivo" @select="seleccionarArchivoEstudio" />
+                    <small v-if="errores.archivo" class="text-red-500">{{ errores.archivo[0] }}</small>
+                </div>
+                <small v-else class="text-surface-500">Para reemplazar el archivo, sube un estudio nuevo.</small>
+            </div>
+
+            <template #footer>
+                <Button label="Cancelar" severity="secondary" @click="visibleEstudioDialog = false" />
+                <Button :label="editandoEstudio ? 'Actualizar' : 'Subir'" icon="pi pi-check" :loading="subiendoEstudio" @click="guardarEstudio()" />
             </template>
         </Dialog>
 

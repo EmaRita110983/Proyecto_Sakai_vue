@@ -29,5 +29,11 @@ export default defineConfig({
                 api: 'modern-compiler'
             }
         }
+    },
+    server: {
+        host: true,
+        // Permite abrir el dev server a través de túneles temporales de Cloudflare
+        // (cloudflared tunnel --url), cuyo subdominio cambia en cada corrida.
+        allowedHosts: ['.trycloudflare.com']
     }
 });

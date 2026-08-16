@@ -1,6 +1,6 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-import { hasRole } from '@/service/auth.service';
+import { hasRole, getUser } from '@/service/auth.service';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -68,6 +68,14 @@ const router = createRouter({
             component: () => import('@/views/pages/auth/Login.vue')
         },
         {
+            path: '/auth/cambiar-password',
+            name: 'cambiar-password',
+            component: () => import('@/views/pages/auth/CambiarPassword.vue'),
+            meta: {
+                requiresAuth: true
+            }
+        },
+        {
             path: '/auth/access',
             name: 'accessDenied',
             component: () => import('@/views/pages/auth/Access.vue')
@@ -94,6 +102,15 @@ router.beforeEach((to, from, next) => {
 
     if (to.path === '/auth/login' && token) {
         next('/');
+        return;
+    }
+
+    // Médico recién creado con la password genérica (ver UserController::store):
+    // hasta que no la cambie, el backend rechaza cualquier otra ruta protegida
+    // (middleware credentials.changed) — acá se evita ese round-trip
+    // redirigiendo directo, salvo que ya esté yendo a cambiar-password o logout.
+    if (token && getUser()?.must_change_password && to.name !== 'cambiar-password') {
+        next('/auth/cambiar-password');
         return;
     }
 

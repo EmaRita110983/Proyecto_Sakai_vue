@@ -1,7 +1,7 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { funListarPacientes, funGuardarPaciente, funActualizarPaciente, funEliminarPaciente } from '@/service/patient.service';
+import { funListarPacientes, funGuardarPaciente, funActualizarPaciente, funEliminarPaciente, funBuscarPacienteEliminado } from '@/service/patient.service';
 import { getUser } from '@/service/auth.service';
 import { pacientesFilterResetSignal } from '@/composables/usePacientesFilter';
 import Toast from 'primevue/toast';
@@ -67,6 +67,45 @@ const filters = ref({
 watch(pacientesFilterResetSignal, () => {
     filters.value.global.value = null;
 });
+
+// ============ Buscar paciente eliminado (soft delete) ============
+// El filtro de arriba solo busca entre los pacientes activos (los eliminados
+// no vienen en `pacientes`). Si no hay ningún activo que coincida, se
+// consulta al backend por si la cédula/pasaporte pertenece a un paciente
+// eliminado, para poder consultarlo (de solo lectura, no se reactiva acá).
+const pacienteEliminadoEncontrado = ref(null);
+
+const pacientesVisibles = computed(() => (pacienteEliminadoEncontrado.value ? [...pacientes.value, pacienteEliminadoEncontrado.value] : pacientes.value));
+
+watch(
+    () => filters.value.global.value,
+    () => {
+        pacienteEliminadoEncontrado.value = null;
+    }
+);
+
+const buscarPaciente = async () => {
+    const termino = (filters.value.global.value || '').trim();
+
+    if (!termino) {
+        return;
+    }
+
+    const hayActivoCoincidente = pacientes.value.some((p) => p.cedula === termino || p.pasaporte === termino);
+
+    if (hayActivoCoincidente) {
+        return;
+    }
+
+    try {
+        const encontrado = await funBuscarPacienteEliminado(termino);
+        pacienteEliminadoEncontrado.value = { ...encontrado, eliminado: true };
+    } catch (error) {
+        if (error.response?.status !== 404) {
+            console.error(error);
+        }
+    }
+};
 
 const nuevoPaciente = () => {
     errores.value = {};
@@ -236,12 +275,13 @@ onMounted(async () => {
         <div class="flex justify-end mb-4">
             <IconField>
                 <InputIcon class="pi pi-search" />
-                <InputText v-model="filters.global.value" placeholder="Buscar por cédula o pasaporte..." autocomplete="off" />
+                <InputText v-model="filters.global.value" placeholder="Buscar por cédula o pasaporte..." autocomplete="off" @keyup.enter="buscarPaciente()" />
             </IconField>
+            <Button icon="pi pi-arrow-right" class="ml-2" @click="buscarPaciente()" />
         </div>
 
         <DataTable
-            :value="pacientes"
+            :value="pacientesVisibles"
             v-model:filters="filters"
             filterDisplay="menu"
             :globalFilterFields="['cedula', 'pasaporte']"
@@ -253,7 +293,12 @@ onMounted(async () => {
             size="small"
         >
             <Column field="id" header="ID"></Column>
-            <Column field="first_name" header="Nombre"></Column>
+            <Column field="first_name" header="Nombre">
+                <template #body="slotProps">
+                    {{ slotProps.data.first_name }}
+                    <span v-if="slotProps.data.eliminado" class="pill pill-critical ml-2">Eliminado</span>
+                </template>
+            </Column>
             <Column field="last_name" header="Apellido"></Column>
             <Column field="cedula" header="Cédula"></Column>
             <Column field="pasaporte" header="Pasaporte"></Column>
@@ -263,15 +308,22 @@ onMounted(async () => {
                 <template #body="slotProps">
                     <div class="flex gap-2">
                         <Button v-if="puedeVerHistorial" icon="pi pi-book" rounded size="small" @click="router.push(`/pacientes/${slotProps.data.id}/historial`)" />
-                        <Button icon="pi pi-pencil" rounded size="small" @click="editarPaciente(slotProps.data)" />
-                        <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarPaciente(slotProps.data)" />
+                        <template v-if="!slotProps.data.eliminado">
+                            <Button icon="pi pi-pencil" rounded size="small" @click="editarPaciente(slotProps.data)" />
+                            <Button v-if="esMedico" icon="pi pi-trash" severity="danger" rounded size="small" @click="eliminarPaciente(slotProps.data)" />
+                        </template>
                     </div>
                 </template>
             </Column>
+
+            <template #empty>
+                <span v-if="filters.global.value">Cédula o pasaporte inválido. Coloque una cédula o un pasaporte válido.</span>
+                <span v-else>No hay pacientes registrados.</span>
+            </template>
         </DataTable>
 
         <Dialog v-model:visible="visibleDialog" :header="editando ? 'Editar Paciente' : 'Nuevo Paciente'" :modal="true" :style="{ width: '700px' }" :breakpoints="{ '960px': '90vw' }">
-            <div class="grid grid-cols-2 gap-4 pt-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="first_name" v-model="paciente.first_name" class="w-full" />
@@ -342,21 +394,21 @@ onMounted(async () => {
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-col gap-2 col-span-2">
+                <div class="flex flex-col gap-2 sm:col-span-2">
                     <FloatLabel class="w-full">
                         <InputText id="emergency_phone" v-model="paciente.emergency_phone" class="w-full" />
                         <label for="emergency_phone">Teléfono de emergencia</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-col gap-2 col-span-2">
+                <div class="flex flex-col gap-2 sm:col-span-2">
                     <FloatLabel class="w-full">
                         <Textarea id="address" v-model="paciente.address" class="w-full" rows="2" autoResize />
                         <label for="address">Dirección</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-col gap-2 col-span-2">
+                <div class="flex flex-col gap-2 sm:col-span-2">
                     <FloatLabel class="w-full">
                         <Textarea id="medical_conditions" v-model="paciente.medical_conditions" class="w-full" rows="3" autoResize />
                         <label for="medical_conditions">Condiciones médicas</label>

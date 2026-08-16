@@ -324,7 +324,7 @@ onMounted(async () => {
             </div>
         </div>
 
-        <Dialog v-model:visible="visibleCitaDialog" header="Nueva cita" :modal="true" :style="{ width: '450px' }">
+        <Dialog v-model:visible="visibleCitaDialog" header="Nueva cita" :modal="true" :style="{ width: '450px' }" :breakpoints="{ '576px': '90vw' }">
             <div class="flex flex-col gap-3 pt-2">
                 <div class="flex items-center gap-2">
                     <FloatLabel class="w-full">
@@ -356,7 +356,7 @@ onMounted(async () => {
         <!-- Paciente nuevo (mismo formulario que Pacientes.vue), para que al -->
         <!-- verlo luego en Gestión de Pacientes ya tenga todos los datos. -->
         <Dialog v-model:visible="visibleNuevoPacienteDialog" header="Nuevo Paciente" :modal="true" :style="{ width: '700px' }" :breakpoints="{ '960px': '90vw' }">
-            <div class="grid grid-cols-2 gap-4 pt-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div class="flex flex-col gap-2">
                     <FloatLabel class="w-full">
                         <InputText id="np_first_name" v-model="pacienteNuevo.first_name" class="w-full" />
@@ -427,21 +427,21 @@ onMounted(async () => {
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-col gap-2 col-span-2">
+                <div class="flex flex-col gap-2 sm:col-span-2">
                     <FloatLabel class="w-full">
                         <InputText id="np_emergency_phone" v-model="pacienteNuevo.emergency_phone" class="w-full" />
                         <label for="np_emergency_phone">Teléfono de emergencia</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-col gap-2 col-span-2">
+                <div class="flex flex-col gap-2 sm:col-span-2">
                     <FloatLabel class="w-full">
                         <Textarea id="np_address" v-model="pacienteNuevo.address" class="w-full" rows="2" autoResize />
                         <label for="np_address">Dirección</label>
                     </FloatLabel>
                 </div>
 
-                <div class="flex flex-col gap-2 col-span-2">
+                <div class="flex flex-col gap-2 sm:col-span-2">
                     <FloatLabel class="w-full">
                         <Textarea id="np_medical_conditions" v-model="pacienteNuevo.medical_conditions" class="w-full" rows="3" autoResize />
                         <label for="np_medical_conditions">Condiciones médicas</label>

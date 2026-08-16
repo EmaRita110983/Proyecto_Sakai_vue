@@ -28,6 +28,17 @@ export async function funLogout() {
 }
 
 
+export async function funCambiarPassword(password, passwordConfirmation) {
+
+    const response = await api.put('/v1/auth/change-password', {
+        password,
+        password_confirmation: passwordConfirmation
+    });
+
+    return response.data;
+}
+
+
 // ============================
 // Funciones de autorización
 // ============================
