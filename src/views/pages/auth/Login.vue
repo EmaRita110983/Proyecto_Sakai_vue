@@ -34,11 +34,11 @@ const login = async () => {
 
         console.log('TOKEN RECIBIDO:', response.token);
 
-        localStorage.setItem('token', response.token);
+        sessionStorage.setItem('token', response.token);
 
         const perfil = await funPerfil();
 
-        localStorage.setItem('user', JSON.stringify(perfil));
+        sessionStorage.setItem('user', JSON.stringify(perfil));
 
         router.push('/');
     } catch (error) {

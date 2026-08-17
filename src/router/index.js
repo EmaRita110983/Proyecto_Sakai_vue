@@ -1,6 +1,6 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-import { hasRole, getUser } from '@/service/auth.service';
+import { hasRole, getUser, funPerfil } from '@/service/auth.service';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -92,8 +92,14 @@ const router = createRouter({
     ]
 });
 
-router.beforeEach((to, from, next) => {
-    const token = localStorage.getItem('token');
+// Token validado en el backend en esta carga de la app (se resetea solo al
+// recargar la página, ya que este módulo se vuelve a inicializar). Evita
+// llamar a /v1/auth/profile en cada navegación interna del SPA: solo se
+// vuelve a validar si el token cambia (login/logout).
+let tokenVerificadoPara = null;
+
+router.beforeEach(async (to, from, next) => {
+    const token = sessionStorage.getItem('token');
 
     if (to.meta.requiresAuth && !token) {
         next('/auth/login');
@@ -103,6 +109,26 @@ router.beforeEach((to, from, next) => {
     if (to.path === '/auth/login' && token) {
         next('/');
         return;
+    }
+
+    // Que exista un token en sessionStorage no garantiza que siga siendo
+    // válido (token revocado, etc.). Se valida contra el backend una vez por
+    // token antes de dejar pasar a una ruta protegida; si falla, se limpia
+    // la sesión local y se manda a login en vez de mostrar la pantalla con
+    // datos cacheados del último usuario.
+    if (to.meta.requiresAuth && token && tokenVerificadoPara !== token) {
+        try {
+            const perfil = await funPerfil();
+
+            sessionStorage.setItem('user', JSON.stringify(perfil));
+            tokenVerificadoPara = token;
+        } catch (error) {
+            sessionStorage.removeItem('token');
+            sessionStorage.removeItem('user');
+            tokenVerificadoPara = null;
+            next('/auth/login');
+            return;
+        }
     }
 
     // Médico recién creado con la password genérica (ver UserController::store):

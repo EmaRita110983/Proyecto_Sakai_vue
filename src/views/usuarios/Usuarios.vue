@@ -26,7 +26,7 @@ const visibleDialog = ref(false);
 const editando = ref(false);
 
 const usuarios = ref([]);
-const usuarioActual = JSON.parse(localStorage.getItem('user'));
+const usuarioActual = JSON.parse(sessionStorage.getItem('user'));
 const esSuperAdmin = usuarioActual?.role === 'superadmin';
 
 const usuario = ref({

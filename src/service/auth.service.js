@@ -45,7 +45,7 @@ export async function funCambiarPassword(password, passwordConfirmation) {
 
 export function getUser() {
 
-    const user = localStorage.getItem('user');
+    const user = sessionStorage.getItem('user');
 
     return user ? JSON.parse(user) : null;
 
@@ -67,6 +67,6 @@ export function hasRole(role) {
 
 export function isAuthenticated() {
 
-    return !!localStorage.getItem('token');
+    return !!sessionStorage.getItem('token');
 
 }

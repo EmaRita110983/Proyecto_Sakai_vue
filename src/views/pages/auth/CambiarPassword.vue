@@ -46,9 +46,9 @@ const guardar = async () => {
     try {
         await funCambiarPassword(password.value, passwordConfirmation.value);
 
-        const user = JSON.parse(localStorage.getItem('user'));
+        const user = JSON.parse(sessionStorage.getItem('user'));
         user.must_change_password = false;
-        localStorage.setItem('user', JSON.stringify(user));
+        sessionStorage.setItem('user', JSON.stringify(user));
 
         toast.add({
             severity: 'success',
@@ -78,8 +78,8 @@ const cerrarSesion = async () => {
     } catch (error) {
         console.error(error);
     } finally {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
         router.push('/auth/login');
     }
 };

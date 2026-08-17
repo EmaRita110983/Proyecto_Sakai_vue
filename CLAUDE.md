@@ -5,7 +5,7 @@ SPA en Vue 3 + Vite, basada en el template admin **Sakai** (PrimeVue 4 + Tailwin
 ## Stack
 
 - Vue 3, Vue Router 4, Axios, PrimeVue 4 (`@primeuix/themes`), Tailwind (`tailwindcss-primeui`).
-- Sin store centralizado (Pinia/Vuex): el estado de auth se maneja con `localStorage` (token) + composable `src/composables/useAuth.js` y helpers en `src/service/auth.service.js`.
+- Sin store centralizado (Pinia/Vuex): el estado de auth se maneja con `sessionStorage` (token + user) + composable `src/composables/useAuth.js` y helpers en `src/service/auth.service.js`. Se eligió `sessionStorage` en vez de `localStorage` a propósito: el token de Sanctum no expira del lado del backend (persiste en `database.sqlite` entre reinicios de servidor), así que si se guardara en `localStorage` la sesión sobreviviría indefinidamente a cualquier reinicio. Con `sessionStorage`, cerrar la pestaña/navegador borra la sesión y la próxima vez pide login, sin interrumpir un F5 normal en medio del trabajo. El guard de `src/router/index.js` además valida el token contra `GET /v1/auth/profile` una vez por token (no en cada navegación) antes de dejar pasar a una ruta protegida, para detectar tokens revocados y no dejar ver pantallas con datos cacheados de un usuario que ya no es válido.
 
 ## Estructura relevante
 
