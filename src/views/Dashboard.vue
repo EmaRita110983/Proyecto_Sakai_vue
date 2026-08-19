@@ -306,7 +306,7 @@ onMounted(async () => {
                     <template #body="slotProps"> {{ slotProps.data.patient?.first_name }} {{ slotProps.data.patient?.last_name }} </template>
                 </Column>
                 <Column field="motivo" header="Motivo"></Column>
-                <Column header="Acciones">
+                <Column v-if="usuario?.role !== 'secretaria'" header="Acciones">
                     <template #body="slotProps">
                         <Button icon="pi pi-check" severity="success" rounded label="Atendido" @click="marcarComoAtendida(slotProps.data)" />
                     </template>

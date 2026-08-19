@@ -32,8 +32,6 @@ const login = async () => {
     try {
         const response = await funLogin(email.value, password.value);
 
-        console.log('TOKEN RECIBIDO:', response.token);
-
         sessionStorage.setItem('token', response.token);
 
         const perfil = await funPerfil();
@@ -48,7 +46,7 @@ const login = async () => {
             severity: 'error',
             summary: 'No se pudo iniciar sesión',
             detail: error.response?.data?.message || 'Ocurrió un error inesperado',
-            life: 4000
+            life: 8000
         });
     }
 };

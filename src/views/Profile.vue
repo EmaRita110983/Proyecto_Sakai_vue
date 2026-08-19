@@ -18,7 +18,6 @@ onMounted(() => {
 });
 </script>
 
-
 <template>
     <div>
         <h1>Mi Perfil</h1>
@@ -29,8 +28,6 @@ onMounted(() => {
             <p><strong>Rol:</strong> {{ usuario.role }}</p>
         </div>
 
-        <p v-else>
-            Cargando perfil...
-        </p>
+        <p v-else>Cargando perfil...</p>
     </div>
 </template>

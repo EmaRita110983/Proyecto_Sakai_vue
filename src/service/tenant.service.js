@@ -1,53 +1,40 @@
 import api from './api';
 
-
 // Branding efectivo del usuario logueado (para pintar el topbar).
 export async function funObtenerBranding() {
-
     const response = await api.get('/v1/branding');
 
     return response.data;
-
 }
-
 
 // A partir de aquí: gestión del branding de un médico puntual, solo para el
 // Superadmin, desde la pantalla de Usuarios.
 export async function funObtenerBrandingUsuario(id) {
-
     const response = await api.get(`/v1/users/${id}/branding`);
 
     return response.data;
-
 }
 
-
 export async function funActualizarBrandingUsuario(id, branding) {
-
     const response = await api.put(`/v1/users/${id}/branding`, {
         brand_name: branding.brand_name,
+        professional_title: branding.professional_title,
         header_credentials: branding.header_credentials,
         licencia_declaracion: branding.licencia_declaracion
     });
 
     return response.data;
-
 }
-
 
 // El propio médico (admin) fija su color principal desde la paleta de
 // colores de la app (AppConfigurator) — el Superadmin ya no lo hace por él.
 export async function funActualizarColorPropio(color) {
-
     const response = await api.put('/v1/branding/color', { brand_color: color });
 
     return response.data;
-
 }
 
-
 export async function funSubirLogoUsuario(id, archivo) {
-
     const formData = new FormData();
     formData.append('logo', archivo);
 
@@ -56,13 +43,10 @@ export async function funSubirLogoUsuario(id, archivo) {
     });
 
     return response.data;
-
 }
-
 
 // lado: 'left' o 'right' — íconos en los extremos del header de los documentos.
 export async function funSubirHeaderIconoUsuario(id, lado, archivo) {
-
     const formData = new FormData();
     formData.append('icon', archivo);
 
@@ -73,5 +57,4 @@ export async function funSubirHeaderIconoUsuario(id, lado, archivo) {
     });
 
     return response.data;
-
 }

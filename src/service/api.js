@@ -2,7 +2,17 @@ import axios from 'axios';
 
 // VITE_API_URL permite apuntar a un backend en otro host (ej. túnel de Cloudflare),
 // donde el backend no vive en el mismo hostname:8000 que el frontend.
-const baseURL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000/api`;
+// El fallback a http://hostname:8000 solo aplica en desarrollo (import.meta.env.DEV):
+// es cómodo para levantar el frontend en cualquier IP de la LAN sin configurar nada.
+// En un build de producción (import.meta.env.PROD) NO hay fallback: si falta
+// VITE_API_URL, antes la app caía en silencio a http:// sin cifrar contra el mismo
+// host — ahora falla explícitamente para que el error se note en el despliegue, no
+// en producción con datos médicos viajando sin TLS.
+const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:8000/api` : null);
+
+if (!baseURL) {
+    throw new Error('Falta configurar VITE_API_URL para este build de producción.');
+}
 
 const api = axios.create({
     baseURL,

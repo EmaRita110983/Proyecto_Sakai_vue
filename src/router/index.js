@@ -25,7 +25,10 @@ const router = createRouter({
                     name: 'pacientes',
                     component: () => import('@/views/pacientes/Pacientes.vue'),
                     meta: {
-                        roles: ['superadmin', 'admin', 'secretaria']
+                        // La secretaria no tiene esta pantalla: solo ve/crea citas
+                        // (y, dentro de ese flujo, puede buscar/crear un paciente
+                        // desde Dashboard.vue, sin pasar por acá).
+                        roles: ['superadmin', 'admin']
                     }
                 },
                 {

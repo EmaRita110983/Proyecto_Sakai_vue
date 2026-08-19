@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar, funBuscarUsuarioEliminado } from '@/service/usuario.service';
+import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar, funBuscarUsuarioEliminado, funReactivar } from '@/service/usuario.service';
 import { funObtenerBrandingUsuario, funActualizarBrandingUsuario, funSubirLogoUsuario, funSubirHeaderIconoUsuario } from '@/service/tenant.service';
 import { usuariosFilterResetSignal } from '@/composables/useUsuariosFilter';
 import Toast from 'primevue/toast';
@@ -218,6 +218,44 @@ const eliminarUsuario = (usuario) => {
     });
 };
 
+const reactivarUsuario = (usuarioEliminado) => {
+    confirm.require({
+        message: `¿Desea reactivar a ${usuarioEliminado.name}?`,
+        header: 'Confirmar reactivación',
+
+        acceptLabel: 'Reactivar',
+        rejectLabel: 'Cancelar',
+
+        accept: async () => {
+            try {
+                await funReactivar(usuarioEliminado.id);
+
+                usuarioEliminadoEncontrado.value = null;
+                filters.value.global.value = null;
+                usuarios.value = await funListar();
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Usuario reactivado',
+                    detail: 'El usuario fue reactivado correctamente',
+                    life: 3000
+                });
+            } catch (error) {
+                if (error.response?.status === 403) {
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'No autorizado',
+                        detail: error.response.data.message ?? 'No puede reactivar este usuario',
+                        life: 3000
+                    });
+                } else {
+                    console.error(error);
+                }
+            }
+        }
+    });
+};
+
 const credencialesDialogVisible = ref(false);
 const credencialesGeneradas = ref({ email: '', password: '' });
 
@@ -254,6 +292,7 @@ const medicoBranding = ref(null);
 
 const brandingForm = ref({
     brand_name: '',
+    professional_title: '',
     header_credentials: '',
     licencia_declaracion: '',
     logo_url: null,
@@ -270,6 +309,7 @@ const abrirBranding = async (usuarioSeleccionado) => {
 
         brandingForm.value = {
             brand_name: data.brand_name ?? '',
+            professional_title: data.professional_title ?? '',
             header_credentials: data.header_credentials ?? '',
             licencia_declaracion: data.licencia_declaracion ?? '',
             logo_url: data.logo_url,
@@ -287,6 +327,7 @@ const guardarBrandingUsuario = async () => {
     try {
         await funActualizarBrandingUsuario(medicoBranding.value.id, {
             brand_name: brandingForm.value.brand_name,
+            professional_title: brandingForm.value.professional_title,
             header_credentials: brandingForm.value.header_credentials,
             licencia_declaracion: brandingForm.value.licencia_declaracion
         });
@@ -568,16 +609,19 @@ onMounted(async () => {
                 </template>
             </Column>
             <Column header="Acciones" bodyStyle="white-space: nowrap">
-    <template #body="slotProps">
-        <div v-if="!slotProps.data.eliminado" class="flex gap-2">
-            <Button icon="pi pi-pencil" rounded size="small" @click="editarUsuario(slotProps.data)" />
-            <Button v-if="slotProps.data.status" icon="pi pi-ban" severity="danger" rounded size="small" @click="desactivarUsuario(slotProps.data)" />
-            <Button v-else icon="pi pi-check" severity="success" rounded size="small" @click="activarUsuario(slotProps.data)" />
-            <Button icon="pi pi-trash" severity="danger" rounded outlined size="small" @click="eliminarUsuario(slotProps.data)" />
-            <Button v-if="esSuperAdmin && slotProps.data.role === 'admin'" icon="pi pi-palette" rounded outlined size="small" @click="abrirBranding(slotProps.data)" />
-        </div>
-    </template>
-</Column>
+                <template #body="slotProps">
+                    <div v-if="!slotProps.data.eliminado" class="flex gap-2">
+                        <Button icon="pi pi-pencil" rounded size="small" @click="editarUsuario(slotProps.data)" />
+                        <Button v-if="slotProps.data.status" icon="pi pi-ban" severity="danger" rounded size="small" @click="desactivarUsuario(slotProps.data)" />
+                        <Button v-else icon="pi pi-check" severity="success" rounded size="small" @click="activarUsuario(slotProps.data)" />
+                        <Button icon="pi pi-trash" severity="danger" rounded outlined size="small" @click="eliminarUsuario(slotProps.data)" />
+                        <Button v-if="esSuperAdmin && slotProps.data.role === 'admin'" icon="pi pi-palette" rounded outlined size="small" @click="abrirBranding(slotProps.data)" />
+                    </div>
+                    <div v-else class="flex gap-2">
+                        <Button icon="pi pi-refresh" label="Reactivar" severity="success" size="small" @click="reactivarUsuario(slotProps.data)" />
+                    </div>
+                </template>
+            </Column>
 
             <template #empty>
                 <span v-if="filters.global.value">Cédula inválida. Coloque una cédula válida.</span>
@@ -674,6 +718,11 @@ onMounted(async () => {
                 </FloatLabel>
 
                 <FloatLabel class="w-full">
+                    <Textarea id="professional_title" v-model="brandingForm.professional_title" class="w-full" rows="4" autoResize />
+                    <label for="professional_title">Título profesional</label>
+                </FloatLabel>
+
+                <FloatLabel class="w-full">
                     <Textarea id="header_credentials" v-model="brandingForm.header_credentials" class="w-full" rows="4" autoResize />
                     <label for="header_credentials">Credenciales (especialidad, teléfonos, email, dirección)</label>
                 </FloatLabel>
@@ -681,31 +730,19 @@ onMounted(async () => {
 
                 <FloatLabel class="w-full">
                     <Textarea id="licencia_declaracion" v-model="brandingForm.licencia_declaracion" class="w-full" rows="3" autoResize />
-                    <label for="licencia_declaracion">Declaración (Licencia Médica)</label>
+                    <label for="licencia_declaracion">Credenciales para la Licencia Médica</label>
                 </FloatLabel>
                 <small class="text-surface-500">
-                    Texto fijo que abre la Licencia Médica, ej: "Yo: Dra. Fulana de Tal Médico provisto del correspondiente exequátur No. 260-02 y Cédula de identidad y electoral No. 000-0000000-0 CERTIFICO, haber examinado a:". La app le agrega el
-                    nombre y cédula del paciente y ", TITULAR." automáticamente.
+                    Ej: "Dr. Fulana de Tal, Médico Internista, provisto del correspondiente exequátur No. 260-02 y Cédula de identidad y electoral No. 000-0000000-0". No escribas "Yo:" ni "CERTIFICO, haber examinado a:": la app agrega esas partes
+                    fijas automáticamente, junto con el nombre y cédula del paciente y ", TITULAR." al final.
                 </small>
-
-                <small class="text-surface-500"> El color principal ya no se asigna aquí: cada médico lo elige desde la paleta de colores de la app (panel de configuración, arriba a la derecha). </small>
 
                 <div class="flex flex-col gap-2">
                     <label class="text-sm font-semibold">Logo (topbar de la aplicación)</label>
                     <div class="flex items-center gap-4 flex-wrap">
                         <img v-if="brandingForm.logo_url" :src="brandingForm.logo_url" alt="Logo actual" style="height: 3rem; width: auto" />
 
-                        <FileUpload
-                            mode="basic"
-                            name="logo"
-                            accept="image/png,image/jpeg"
-                            :maxFileSize="2000000"
-                            :auto="true"
-                            chooseLabel="Cambiar logo"
-                            :customUpload="true"
-                            @uploader="subirLogoUsuario"
-                            :disabled="subiendoLogo"
-                        />
+                        <FileUpload mode="basic" name="logo" accept="image/png,image/jpeg" :maxFileSize="2000000" :auto="true" chooseLabel="Cambiar logo" :customUpload="true" @uploader="subirLogoUsuario" :disabled="subiendoLogo" />
                     </div>
                 </div>
 

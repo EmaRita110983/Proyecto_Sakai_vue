@@ -40,7 +40,10 @@ const model = ref([
                 // en /pacientes, el clic no navega, así que este command es la
                 // única forma de limpiar el filtro y volver a ver todos.
                 command: solicitarLimpiarFiltroPacientes,
-                visible: hasRole('admin') || hasRole('secretaria')
+                // La secretaria no gestiona pacientes: solo ve/crea citas. Puede
+                // buscar/crear un paciente al agendar una cita (ver Dashboard.vue),
+                // pero no tiene esta pantalla completa de gestión.
+                visible: hasRole('admin')
             },
             {
                 label: 'Historial clínico',

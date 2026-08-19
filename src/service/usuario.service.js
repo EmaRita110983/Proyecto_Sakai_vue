@@ -1,69 +1,50 @@
 import api from './api';
 
-
 export async function funListar() {
-
     const response = await api.get('/v1/users');
 
     return response.data;
-
 }
-
 
 export async function funGuardar(usuario) {
-
-    const response = await api.post(
-        '/v1/users',
-        usuario
-    );
+    const response = await api.post('/v1/users', usuario);
 
     return response.data;
-
 }
 
-
 export async function funModificar(id, usuario) {
-
-    const response = await api.put(
-        `/v1/users/${id}`,
-        usuario
-    );
+    const response = await api.put(`/v1/users/${id}`, usuario);
 
     return response.data;
-
 }
 
 export async function funCambiarEstado(id) {
-
-    const response = await api.put(
-        `/v1/users/${id}/status`
-    );
+    const response = await api.put(`/v1/users/${id}/status`);
 
     return response.data;
-
 }
-
 
 export async function funEliminar(id) {
-
-    const response = await api.delete(
-        `/v1/users/${id}`
-    );
+    const response = await api.delete(`/v1/users/${id}`);
 
     return response.data;
-
 }
-
 
 // Busca un usuario (médico o secretaria) eliminado (soft delete) por cédula,
 // para consultar sus datos de solo lectura aunque ya no aparezca en el
 // listado normal.
 export async function funBuscarUsuarioEliminado(documento) {
-
     const response = await api.get('/v1/users/eliminados/buscar', {
         params: { documento }
     });
 
     return response.data;
+}
 
+// Reactiva (deshace el soft delete) un usuario encontrado con
+// funBuscarUsuarioEliminado.
+export async function funReactivar(id) {
+    const response = await api.put(`/v1/users/${id}/restore`);
+
+    return response.data;
 }

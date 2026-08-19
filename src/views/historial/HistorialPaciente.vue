@@ -106,12 +106,7 @@ const buscarPorCedula = async () => {
 const escapeHtml = (valor) => {
     if (valor === null || valor === undefined) return '';
 
-    return String(valor)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
+    return String(valor).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 };
 
 const imprimirDocumento = (titulo, contenidoHtml) => {
@@ -262,6 +257,7 @@ const imprimirHistorial = (entrada) => {
         'Historial clínico',
         `
         <div class="campo"><label>Paciente</label><p>${escapeHtml(nombrePaciente)}</p></div>
+        <div class="campo"><label>${paciente.value?.cedula ? 'Cédula' : 'Pasaporte'}</label><p>${escapeHtml(paciente.value?.cedula || paciente.value?.pasaporte)}</p></div>
         <div class="campo"><label>Fecha de consulta</label><p>${escapeHtml(entrada.fecha_consulta)}</p></div>
         <div class="campo"><label>Motivo de consulta</label><p>${escapeHtml(entrada.motivo_consulta)}</p></div>
         <div class="campo"><label>Diagnóstico</label><p>${escapeHtml(entrada.diagnostico)}</p></div>
@@ -460,6 +456,7 @@ const imprimirReceta = (recetaSeleccionada) => {
                     .header img { max-height: 90px; max-width: 110px; object-fit: contain; }
                     .header-credenciales { text-align: center; flex: 1; }
                     .header-credenciales h2 { margin: 0 0 0.25rem; font-size: 1.3rem; }
+                    .header-credenciales .titulo-profesional { font-size: 0.95rem; font-style: italic; margin: 0 0 0.25rem; }
                     .header-credenciales .parrafo { font-size: 0.85rem; white-space: pre-line; line-height: 1.3; }
                     hr { border: none; border-top: 2px solid #333; margin: 1rem 0; }
                     .titulo-documento { text-align: center; font-weight: bold; font-size: 1.3rem; letter-spacing: 0.05em; margin-bottom: 1rem; }
@@ -483,6 +480,7 @@ const imprimirReceta = (recetaSeleccionada) => {
                     ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
                         <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        ${branding.value.professional_title ? `<div class="titulo-profesional">${escapeHtml(branding.value.professional_title)}</div>` : ''}
                         <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
                     ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
@@ -497,7 +495,7 @@ const imprimirReceta = (recetaSeleccionada) => {
                         <div class="datos-paciente">
                             <div class="col-paciente">
                                 <strong>Paciente:</strong> ${escapeHtml(nombrePaciente.toUpperCase())}<br />
-                                <strong>Céd:</strong> ${escapeHtml(paciente.value?.cedula)}<br />
+                                <strong>${paciente.value?.cedula ? 'Céd:' : 'Pasaporte:'}</strong> ${escapeHtml(paciente.value?.cedula || paciente.value?.pasaporte)}<br />
                                 <strong>Edad:</strong> ${edad}
                             </div>
                             <div class="col-ars"><strong>ARS:</strong> ${escapeHtml(ars)}</div>
@@ -650,6 +648,7 @@ const imprimirDietaDoc = (dietaSeleccionada) => {
                     .header img { max-height: 90px; max-width: 110px; object-fit: contain; }
                     .header-credenciales { text-align: center; flex: 1; }
                     .header-credenciales h2 { margin: 0 0 0.25rem; font-size: 1.3rem; }
+                    .header-credenciales .titulo-profesional { font-size: 0.95rem; font-style: italic; margin: 0 0 0.25rem; }
                     .header-credenciales .parrafo { font-size: 0.85rem; white-space: pre-line; line-height: 1.3; }
                     hr { border: none; border-top: 2px solid #333; margin: 1rem 0; }
                     .titulo-documento { text-align: center; font-weight: bold; font-size: 1.3rem; letter-spacing: 0.05em; margin-bottom: 1rem; }
@@ -666,6 +665,7 @@ const imprimirDietaDoc = (dietaSeleccionada) => {
                     ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
                         <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        ${branding.value.professional_title ? `<div class="titulo-profesional">${escapeHtml(branding.value.professional_title)}</div>` : ''}
                         <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
                     ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
@@ -678,7 +678,7 @@ const imprimirDietaDoc = (dietaSeleccionada) => {
                 <div class="caja-titulo">
                     <div class="col-izquierda">
                         <strong>Paciente:</strong> ${escapeHtml(nombrePaciente.toUpperCase())}<br />
-                        <strong>Céd:</strong> ${escapeHtml(paciente.value?.cedula)}<br />
+                        <strong>${paciente.value?.cedula ? 'Céd:' : 'Pasaporte:'}</strong> ${escapeHtml(paciente.value?.cedula || paciente.value?.pasaporte)}<br />
                         <strong>Edad:</strong> ${edad}
                     </div>
                     <div class="col-derecha">
@@ -814,8 +814,24 @@ const guardarEstudio = async () => {
     }
 };
 
+// Antes se abría archivo_url tal cual viniera del backend: si por error (o por un
+// backend comprometido) llegara algo como "javascript:..." en vez de una URL de
+// archivo, window.open lo habría ejecutado. Se valida el esquema acá, en el borde
+// donde el dato deja de ser solo texto y pasa a ser una acción del navegador.
 const verEstudio = (estudioSeleccionado) => {
-    window.open(estudioSeleccionado.archivo_url, '_blank');
+    const url = estudioSeleccionado.archivo_url ?? '';
+
+    if (!/^https?:\/\//i.test(url)) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'La URL del archivo no es válida',
+            life: 3000
+        });
+        return;
+    }
+
+    window.open(url, '_blank');
 };
 
 const eliminarEstudio = (estudioSeleccionado) => {
@@ -1026,6 +1042,7 @@ const imprimirAutorizacion = (autorizacionSeleccionada) => {
                     .header img { max-height: 90px; max-width: 110px; object-fit: contain; }
                     .header-credenciales { text-align: center; flex: 1; }
                     .header-credenciales h2 { margin: 0 0 0.25rem; font-size: 1.3rem; }
+                    .header-credenciales .titulo-profesional { font-size: 0.95rem; font-style: italic; margin: 0 0 0.25rem; }
                     .header-credenciales .parrafo { font-size: 0.85rem; white-space: pre-line; line-height: 1.3; }
                     hr { border: none; border-top: 2px solid #333; margin: 1rem 0; }
                     .caja-titulo { border: 1px solid #333; }
@@ -1046,6 +1063,7 @@ const imprimirAutorizacion = (autorizacionSeleccionada) => {
                     ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
                         <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        ${branding.value.professional_title ? `<div class="titulo-profesional">${escapeHtml(branding.value.professional_title)}</div>` : ''}
                         <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
                     ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
@@ -1058,6 +1076,7 @@ const imprimirAutorizacion = (autorizacionSeleccionada) => {
                     <div class="datos-paciente">
                         <div class="col-paciente">
                             <strong>Paciente:</strong> ${escapeHtml(nombrePaciente.toUpperCase())}<br />
+                            <strong>${paciente.value?.cedula ? 'Céd:' : 'Pasaporte:'}</strong> ${escapeHtml(paciente.value?.cedula || paciente.value?.pasaporte)}<br />
                             <strong>Edad:</strong> ${edad}
                         </div>
                         <div class="col-ars"><strong>ARS:</strong> ${escapeHtml(ars)}</div>
@@ -1225,6 +1244,7 @@ const imprimirLicencia = (licenciaSeleccionada) => {
                     .header img { max-height: 90px; max-width: 110px; object-fit: contain; }
                     .header-credenciales { text-align: center; flex: 1; }
                     .header-credenciales h2 { margin: 0 0 0.25rem; font-size: 1.3rem; }
+                    .header-credenciales .titulo-profesional { font-size: 0.95rem; font-style: italic; margin: 0 0 0.25rem; }
                     .header-credenciales .parrafo { font-size: 0.85rem; white-space: pre-line; line-height: 1.3; }
                     hr { border: none; border-top: 2px solid #333; margin: 1rem 0; }
                     .titulo-documento { text-align: center; font-weight: bold; font-size: 1.3rem; letter-spacing: 0.05em; margin-bottom: 1rem; }
@@ -1239,6 +1259,7 @@ const imprimirLicencia = (licenciaSeleccionada) => {
                     ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
                     <div class="header-credenciales">
                         <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        ${branding.value.professional_title ? `<div class="titulo-profesional">${escapeHtml(branding.value.professional_title)}</div>` : ''}
                         <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
                     </div>
                     ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
@@ -1250,7 +1271,7 @@ const imprimirLicencia = (licenciaSeleccionada) => {
 
                 <div class="caja-secciones">
                     <div class="seccion">
-                        <p>${escapeHtml(declaracion)} ${escapeHtml(nombrePaciente.toUpperCase())}, Cédula de identidad y electoral No. ${escapeHtml(paciente.value?.cedula)}, TITULAR.</p>
+                        <p>Yo: ${escapeHtml(declaracion)} CERTIFICO, haber examinado a: ${escapeHtml(nombrePaciente.toUpperCase())}, ${paciente.value?.cedula ? 'Cédula de identidad y electoral No.' : 'Pasaporte No.'} ${escapeHtml(paciente.value?.cedula || paciente.value?.pasaporte)}, TITULAR.</p>
                     </div>
                     <div class="seccion">
                         <p><strong>Y constatado:</strong> ${escapeHtml(licenciaSeleccionada.constatado)}</p>
@@ -1340,7 +1361,7 @@ onMounted(async () => {
                         {{ paciente.first_name }} {{ paciente.last_name }}
                         <span v-if="esEliminado" class="pill pill-critical ml-2">Eliminado</span>
                     </h3>
-                    <p>CI {{ paciente.cedula }}</p>
+                    <p>{{ paciente.cedula ? 'CI' : 'Pasaporte' }} {{ paciente.cedula || paciente.pasaporte }}</p>
                 </div>
             </div>
             <div class="meta">
@@ -1469,7 +1490,9 @@ onMounted(async () => {
                                 <template #body="slotProps">{{ formatearFechaLegible(slotProps.data.fecha_estudio) }}</template>
                             </Column>
                             <Column header="Tipo">
-                                <template #body="slotProps"><span class="pill pill-neutral">{{ etiquetaTipoEstudio(slotProps.data.tipo) }}</span></template>
+                                <template #body="slotProps"
+                                    ><span class="pill pill-neutral">{{ etiquetaTipoEstudio(slotProps.data.tipo) }}</span></template
+                                >
                             </Column>
                             <Column field="descripcion" header="Descripción"></Column>
                             <Column header="Acciones" headerStyle="width: 8.5rem" bodyStyle="white-space: nowrap; width: 8.5rem">
@@ -1754,6 +1777,19 @@ onMounted(async () => {
                 </FloatLabel>
                 <small v-if="errores.fecha" class="text-red-500">{{ errores.fecha[0] }}</small>
 
+                <div class="flex flex-col gap-1 w-full">
+                    <label class="text-sm text-surface-600">Declaración (vista previa)</label>
+                    <div class="w-full border border-surface-300 dark:border-surface-600 rounded-border p-3 text-sm leading-relaxed">
+                        <span>Yo: </span>
+                        <span class="text-pink-500 dark:text-pink-400">{{ branding.licencia_declaracion || '(sin credenciales de licencia configuradas para este médico)' }}</span>
+                        <span> CERTIFICO, haber examinado a: </span>
+                        <span class="text-green-600 dark:text-green-400">{{ paciente ? `${paciente.first_name} ${paciente.last_name}`.toUpperCase() : '' }}</span>
+                        <span>, {{ paciente?.cedula ? 'Cédula de identidad y electoral No.' : 'Pasaporte No.' }} </span>
+                        <span class="text-green-600 dark:text-green-400">{{ paciente?.cedula || paciente?.pasaporte }}</span>
+                        <span>, TITULAR.</span>
+                    </div>
+                </div>
+
                 <FloatLabel class="w-full">
                     <Textarea id="constatado" v-model="licencia.constatado" class="w-full" rows="3" autoResize />
                     <label for="constatado">Y constatado</label>
@@ -1768,14 +1804,7 @@ onMounted(async () => {
 
                 <div class="flex flex-col gap-1 w-full">
                     <label for="certificacion_cierre" class="text-sm text-surface-600">Expido la presente certificación en: (ciudad y fecha)</label>
-                    <Textarea
-                        id="certificacion_cierre"
-                        v-model="licencia.certificacion_cierre"
-                        class="w-full"
-                        rows="2"
-                        autoResize
-                        placeholder="[ciudad] a partir de hoy día [día] del mes de [mes] del año [año]"
-                    />
+                    <Textarea id="certificacion_cierre" v-model="licencia.certificacion_cierre" class="w-full" rows="2" autoResize placeholder="[ciudad] a partir de hoy día [día] del mes de [mes] del año [año]" />
                 </div>
                 <small v-if="errores.certificacion_cierre" class="text-red-500">{{ errores.certificacion_cierre[0] }}</small>
             </div>

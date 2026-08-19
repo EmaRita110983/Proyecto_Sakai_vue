@@ -1,5 +1,4 @@
 <script setup>
-
 console.log('AppTopbar cargado');
 
 import { useLayout } from '@/layout/composables/layout';

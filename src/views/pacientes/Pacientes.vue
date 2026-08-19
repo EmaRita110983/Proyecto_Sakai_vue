@@ -280,18 +280,7 @@ onMounted(async () => {
             <Button icon="pi pi-arrow-right" class="ml-2" @click="buscarPaciente()" />
         </div>
 
-        <DataTable
-            :value="pacientesVisibles"
-            v-model:filters="filters"
-            filterDisplay="menu"
-            :globalFilterFields="['cedula', 'pasaporte']"
-            paginator
-            :rows="10"
-            stripedRows
-            showGridlines
-            responsiveLayout="scroll"
-            size="small"
-        >
+        <DataTable :value="pacientesVisibles" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula', 'pasaporte']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll" size="small">
             <Column field="id" header="ID"></Column>
             <Column field="first_name" header="Nombre">
                 <template #body="slotProps">
