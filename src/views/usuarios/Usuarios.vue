@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar, funBuscarUsuarioEliminado, funReactivar } from '@/service/usuario.service';
+import { funListar, funGuardar, funModificar, funCambiarEstado, funEliminar, funBuscarUsuarioEliminado, funReactivar, funRestablecerPassword } from '@/service/usuario.service';
 import { funObtenerBrandingUsuario, funActualizarBrandingUsuario, funSubirLogoUsuario, funSubirHeaderIconoUsuario } from '@/service/tenant.service';
 import { usuariosFilterResetSignal } from '@/composables/useUsuariosFilter';
 import Toast from 'primevue/toast';
@@ -258,6 +258,50 @@ const reactivarUsuario = (usuarioEliminado) => {
 
 const credencialesDialogVisible = ref(false);
 const credencialesGeneradas = ref({ email: '', password: '' });
+
+// El usuario avisa (por fuera de la app: teléfono, en persona) que olvidó su
+// contraseña; quien lo gestiona (su médico o el superadmin) se la resetea
+// desde acá. No hay flujo de "olvidé mi contraseña" por email — ver
+// UserController::resetPassword.
+const restablecerPassword = (usuarioSeleccionado) => {
+    confirm.require({
+        message: `¿Desea restablecer la contraseña de ${usuarioSeleccionado.name}? La contraseña actual dejará de funcionar de inmediato.`,
+        header: 'Confirmar restablecimiento',
+
+        acceptLabel: 'Restablecer',
+        rejectLabel: 'Cancelar',
+
+        accept: async () => {
+            try {
+                const data = await funRestablecerPassword(usuarioSeleccionado.id);
+
+                credencialesGeneradas.value = {
+                    email: usuarioSeleccionado.email,
+                    password: data.password_generica
+                };
+                credencialesDialogVisible.value = true;
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Contraseña restablecida',
+                    detail: 'Se generó una nueva contraseña',
+                    life: 3000
+                });
+            } catch (error) {
+                if (error.response?.status === 403) {
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'No autorizado',
+                        detail: error.response.data.message ?? 'No puede restablecer la contraseña de este usuario',
+                        life: 3000
+                    });
+                } else {
+                    console.error(error);
+                }
+            }
+        }
+    });
+};
 
 const copiarCredenciales = async () => {
     const texto = `Email: ${credencialesGeneradas.value.email}\nPassword: ${credencialesGeneradas.value.password}`;
@@ -615,7 +659,8 @@ onMounted(async () => {
                         <Button v-if="slotProps.data.status" icon="pi pi-ban" severity="danger" rounded size="small" @click="desactivarUsuario(slotProps.data)" />
                         <Button v-else icon="pi pi-check" severity="success" rounded size="small" @click="activarUsuario(slotProps.data)" />
                         <Button icon="pi pi-trash" severity="danger" rounded outlined size="small" @click="eliminarUsuario(slotProps.data)" />
-                        <Button v-if="esSuperAdmin && slotProps.data.role === 'admin'" icon="pi pi-palette" rounded outlined size="small" @click="abrirBranding(slotProps.data)" />
+                        <Button icon="pi pi-key" rounded size="small" title="Restablecer contraseña" @click="restablecerPassword(slotProps.data)" />
+                        <Button v-if="esSuperAdmin && slotProps.data.role === 'admin'" icon="pi pi-palette" rounded size="small" @click="abrirBranding(slotProps.data)" />
                     </div>
                     <div v-else class="flex gap-2">
                         <Button icon="pi pi-refresh" label="Reactivar" severity="success" size="small" @click="reactivarUsuario(slotProps.data)" />
@@ -687,9 +732,9 @@ onMounted(async () => {
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="credencialesDialogVisible" header="Credenciales del médico" :modal="true" :closable="false" :style="{ width: '450px' }" :breakpoints="{ '576px': '90vw' }">
+        <Dialog v-model:visible="credencialesDialogVisible" header="Credenciales generadas" :modal="true" :closable="false" :style="{ width: '450px' }" :breakpoints="{ '576px': '90vw' }">
             <div class="flex flex-col gap-3">
-                <small class="text-surface-500"> Entrégale estos datos al médico. Deberá cambiar la contraseña obligatoriamente en su primer inicio de sesión. </small>
+                <small class="text-surface-500"> Entrégale estos datos al usuario. Deberá cambiar la contraseña obligatoriamente en su próximo inicio de sesión. </small>
 
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-semibold">Email</span>

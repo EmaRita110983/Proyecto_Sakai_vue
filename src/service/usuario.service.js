@@ -48,3 +48,12 @@ export async function funReactivar(id) {
 
     return response.data;
 }
+
+// Restablece manualmente la contraseña de un usuario que la olvidó (no hay
+// flujo por email, ver UserController::resetPassword): genera una nueva
+// contraseña aleatoria y obliga a cambiarla en el próximo login.
+export async function funRestablecerPassword(id) {
+    const response = await api.put(`/v1/users/${id}/reset-password`);
+
+    return response.data;
+}

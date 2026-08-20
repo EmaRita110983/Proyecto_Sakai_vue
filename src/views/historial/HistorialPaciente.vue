@@ -1292,6 +1292,204 @@ const imprimirLicencia = (licenciaSeleccionada) => {
     ventana.print();
 };
 
+// ============ Imprimir historial médico completo ============
+// Un solo documento con las 6 secciones (consultas, recetas, dieta, estudios
+// médicos, autorización de seguro médico y licencias) del paciente que está
+// cargado en este momento — nunca de otro, porque todo sale de los mismos
+// refs (historial/recetas/dietas/estudios/autorizaciones/licencias) que ya
+// están acotados a patientId. Los estudios que son imagen se incrustan en el
+// propio documento; los que son PDF no se incrustan (a pedido: se imprimen
+// aparte) — se abren cada uno en su propia pestaña para que el usuario los
+// imprima con el visor nativo del navegador.
+const imprimirHistorialCompleto = () => {
+    const nombrePaciente = paciente.value ? `${paciente.value.first_name} ${paciente.value.last_name}` : '';
+    const identificacionLabel = paciente.value?.cedula ? 'Cédula' : 'Pasaporte';
+    const identificacionValor = paciente.value?.cedula || paciente.value?.pasaporte;
+    const edad = calcularEdadDetallada(paciente.value?.birth_date);
+
+    const seccionConsultas = historial.value.length
+        ? historial.value
+              .map(
+                  (h) => `
+            <div class="entrada">
+                <div class="entrada-fecha">${escapeHtml(formatearFechaLegible(h.fecha_consulta))}</div>
+                <div class="campo"><label>Motivo de consulta</label><p>${escapeHtml(h.motivo_consulta)}</p></div>
+                <div class="campo"><label>Diagnóstico</label><p>${escapeHtml(h.diagnostico)}</p></div>
+                <div class="campo"><label>Tratamiento</label><p>${escapeHtml(h.tratamiento)}</p></div>
+                ${h.observaciones ? `<div class="campo"><label>Observaciones</label><p>${escapeHtml(h.observaciones)}</p></div>` : ''}
+            </div>`
+              )
+              .join('')
+        : '<p class="vacio">Sin consultas registradas.</p>';
+
+    const seccionRecetas = recetas.value.length
+        ? recetas.value
+              .map(
+                  (r) => `
+            <div class="entrada">
+                <div class="entrada-fecha">${escapeHtml(formatearFechaLegible(r.fecha_emision))} — ${escapeHtml(formatearHoraLegible(r.created_at))}</div>
+                <div class="campo"><label>ARS</label><p>${escapeHtml(r.ars || 'No especificada')}</p></div>
+                <div class="campo"><label>Medicamentos</label><p>${escapeHtml(r.medicamentos)}</p></div>
+                ${r.indicaciones ? `<div class="campo"><label>Indicaciones</label><p>${escapeHtml(r.indicaciones)}</p></div>` : ''}
+            </div>`
+              )
+              .join('')
+        : '<p class="vacio">Sin recetas registradas.</p>';
+
+    const seccionDietas = dietas.value.length
+        ? dietas.value
+              .map(
+                  (d) => `
+            <div class="entrada">
+                <div class="entrada-fecha">${escapeHtml(formatearFechaLegible(d.fecha))}</div>
+                <div class="campo"><p>${escapeHtml(d.dieta)}</p></div>
+            </div>`
+              )
+              .join('')
+        : '<p class="vacio">Sin planes de dieta registrados.</p>';
+
+    const pdfsEstudios = estudios.value.filter((e) => e.archivo_mime === 'application/pdf' && /^https?:\/\//i.test(e.archivo_url ?? ''));
+
+    const seccionEstudios = estudios.value.length
+        ? estudios.value
+              .map((e) => {
+                  const esImagen = (e.archivo_mime || '').startsWith('image/');
+                  const urlValida = /^https?:\/\//i.test(e.archivo_url ?? '');
+
+                  return `
+            <div class="entrada">
+                <div class="entrada-fecha">${escapeHtml(etiquetaTipoEstudio(e.tipo))} — ${escapeHtml(formatearFechaLegible(e.fecha_estudio))}</div>
+                ${e.descripcion ? `<div class="campo"><label>Descripción</label><p>${escapeHtml(e.descripcion)}</p></div>` : ''}
+                ${esImagen && urlValida ? `<img class="estudio-imagen" src="${escapeHtml(e.archivo_url)}" alt="${escapeHtml(e.archivo_nombre_original)}" />` : ''}
+                ${!esImagen ? `<div class="estudio-meta">Archivo: ${escapeHtml(e.archivo_nombre_original)} (se imprime aparte, en su propia pestaña)</div>` : ''}
+            </div>`;
+              })
+              .join('')
+        : '<p class="vacio">Sin estudios médicos registrados.</p>';
+
+    const seccionAutorizaciones = autorizaciones.value.length
+        ? autorizaciones.value
+              .map(
+                  (a) => `
+            <div class="entrada">
+                <div class="entrada-fecha">${escapeHtml(formatearFechaLegible(a.fecha))}</div>
+                <div class="campo"><label>ARS</label><p>${escapeHtml(a.ars || 'No especificada')}</p></div>
+                <div class="campo"><label>Historia detallada de la enfermedad actual</label><p>${escapeHtml(a.historia_enfermedad)}</p></div>
+                <div class="campo"><label>Estudios realizados</label><p>${escapeHtml(a.estudios_realizados)}</p></div>
+                <div class="campo"><label>Tiempo de evolución</label><p>${escapeHtml(a.tiempo_evolucion)}</p></div>
+                <div class="campo"><label>Tratamiento(s) previo(s)</label><p>${escapeHtml(a.tratamiento_previo)}</p></div>
+                <div class="campo"><label>Diagnóstico presuntivo</label><p>${escapeHtml(a.diagnostico_presuntivo)}</p></div>
+            </div>`
+              )
+              .join('')
+        : '<p class="vacio">Sin autorizaciones de seguro médico registradas.</p>';
+
+    const declaracionLicencia = branding.value.licencia_declaracion ?? '';
+
+    const seccionLicencias = licencias.value.length
+        ? licencias.value
+              .map(
+                  (l) => `
+            <div class="entrada">
+                <div class="entrada-fecha">${escapeHtml(formatearFechaLegible(l.fecha))}</div>
+                <div class="campo"><p>Yo: ${escapeHtml(declaracionLicencia)} CERTIFICO, haber examinado a: ${escapeHtml(nombrePaciente.toUpperCase())}, ${identificacionLabel === 'Cédula' ? 'Cédula de identidad y electoral No.' : 'Pasaporte No.'} ${escapeHtml(identificacionValor)}, TITULAR.</p></div>
+                <div class="campo"><label>Y constatado</label><p>${escapeHtml(l.constatado)}</p></div>
+                <div class="campo"><label>Por lo que recomiendo</label><p>${escapeHtml(l.recomendacion)}</p></div>
+                <div class="campo"><label>Expido la presente certificación en</label><p>${escapeHtml(l.certificacion_cierre)}</p></div>
+            </div>`
+              )
+              .join('')
+        : '<p class="vacio">Sin licencias médicas registradas.</p>';
+
+    const ventana = window.open('', '_blank');
+
+    ventana.document.write(`
+        <html>
+            <head>
+                <title>Historial médico completo</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 2rem; color: #222; }
+                    .header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+                    .header img { max-height: 90px; max-width: 110px; object-fit: contain; }
+                    .header-credenciales { text-align: center; flex: 1; }
+                    .header-credenciales h2 { margin: 0 0 0.25rem; font-size: 1.3rem; }
+                    .header-credenciales .titulo-profesional { font-size: 0.95rem; font-style: italic; margin: 0 0 0.25rem; }
+                    .header-credenciales .parrafo { font-size: 0.85rem; white-space: pre-line; line-height: 1.3; }
+                    hr { border: none; border-top: 2px solid #333; margin: 1rem 0; }
+                    .titulo-documento { text-align: center; font-weight: bold; font-size: 1.4rem; letter-spacing: 0.05em; margin: 0.5rem 0 1.25rem; }
+                    .datos-paciente-box { border: 1px solid #333; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }
+                    .seccion-titulo { font-size: 1.1rem; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 0.3rem; margin: 1.75rem 0 1rem; }
+                    .seccion-titulo:first-of-type { margin-top: 0; }
+                    .entrada { border: 1px solid #ccc; border-radius: 4px; padding: 0.9rem 1.1rem; margin-bottom: 0.9rem; page-break-inside: avoid; }
+                    .entrada-fecha { font-weight: bold; margin-bottom: 0.4rem; }
+                    .campo { margin-bottom: 0.6rem; }
+                    .campo label { display: block; font-weight: bold; font-size: 0.82rem; color: #555; }
+                    .campo p { margin: 0.15rem 0 0; white-space: pre-wrap; }
+                    .vacio { color: #888; font-style: italic; margin: 0 0 1rem; }
+                    .estudio-imagen { max-width: 100%; max-height: 420px; display: block; margin: 0.5rem 0 0.25rem; border: 1px solid #ccc; }
+                    .estudio-meta { font-size: 0.85rem; color: #555; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    ${branding.value.header_icon_left_url ? `<img src="${escapeHtml(branding.value.header_icon_left_url)}" alt="" />` : '<div></div>'}
+                    <div class="header-credenciales">
+                        <h2>${escapeHtml(branding.value.brand_name)}</h2>
+                        ${branding.value.professional_title ? `<div class="titulo-profesional">${escapeHtml(branding.value.professional_title)}</div>` : ''}
+                        <div class="parrafo">${escapeHtml(branding.value.header_credentials)}</div>
+                    </div>
+                    ${branding.value.header_icon_right_url ? `<img src="${escapeHtml(branding.value.header_icon_right_url)}" alt="" />` : '<div></div>'}
+                </div>
+
+                <hr />
+
+                <div class="titulo-documento">HISTORIAL MÉDICO COMPLETO</div>
+
+                <div class="datos-paciente-box">
+                    <strong>Paciente:</strong> ${escapeHtml(nombrePaciente.toUpperCase())}<br />
+                    <strong>${identificacionLabel}:</strong> ${escapeHtml(identificacionValor)}<br />
+                    <strong>Edad:</strong> ${escapeHtml(edad)}
+                </div>
+
+                <div class="seccion-titulo">Consultas</div>
+                ${seccionConsultas}
+
+                <div class="seccion-titulo">Recetas</div>
+                ${seccionRecetas}
+
+                <div class="seccion-titulo">Dieta</div>
+                ${seccionDietas}
+
+                <div class="seccion-titulo">Estudios médicos</div>
+                ${seccionEstudios}
+
+                <div class="seccion-titulo">Autorización de seguro médico</div>
+                ${seccionAutorizaciones}
+
+                <div class="seccion-titulo">Licencia médica</div>
+                ${seccionLicencias}
+            </body>
+        </html>
+    `);
+
+    ventana.document.close();
+
+    // Cada PDF de Estudios médicos se abre aparte (no se incrusta acá): el
+    // usuario lo imprime con el visor nativo del navegador en su propia
+    // pestaña. Se abren antes del print() del documento principal, todavía
+    // dentro del mismo gesto de click, para que el navegador no los bloquee
+    // como pop-ups.
+    pdfsEstudios.forEach((e) => window.open(e.archivo_url, '_blank'));
+
+    // Se espera a que termine de cargar (incluidas las imágenes de los
+    // estudios, que vienen de una URL firmada del backend, no del propio
+    // documento) antes de imprimir — si no, algunas quedan en blanco.
+    ventana.onload = () => {
+        ventana.focus();
+        ventana.print();
+    };
+};
+
 // Se usa tanto en el montaje inicial como al reaccionar a un cambio de
 // patientId (ver watch más abajo): al buscar un paciente desde /historial
 // (sin id), la navegación a /pacientes/:id/historial reutiliza esta misma
@@ -1397,7 +1595,8 @@ onMounted(async () => {
             <TabPanels>
                 <!-- Historial médico -->
                 <TabPanel value="consultas">
-                    <div class="flex justify-end items-center gap-2 mb-3 mt-2">
+                    <div class="flex justify-center items-end gap-2 mb-3 mt-2">
+                        <Button label="Imprimir Historial Médico" icon="pi pi-print" outlined @click="imprimirHistorialCompleto()" />
                         <FloatLabel>
                             <DatePicker id="filtroFecha" v-model="filtroFecha" dateFormat="dd/mm/yy" showIcon iconDisplay="input" showButtonBar />
                             <label for="filtroFecha">Filtrar por fecha</label>
@@ -1816,3 +2015,11 @@ onMounted(async () => {
         </Dialog>
     </div>
 </template>
+
+<style scoped>
+/* Color de marca fijo, no solo al enfocar (a diferencia del comportamiento
+   por defecto de FloatLabel, que solo colorea la label con foco/valor). */
+label[for='filtroFecha'] {
+    color: var(--primary-color) !important;
+}
+</style>
