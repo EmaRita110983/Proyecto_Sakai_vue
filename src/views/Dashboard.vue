@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getUser } from '@/service/auth.service';
 import { funBuscarPacientes, funGuardarPaciente } from '@/service/patient.service';
@@ -34,6 +34,40 @@ const citasHoy = ref([]);
 const pacientes = ref([]);
 const errores = ref({});
 const visibleCitaDialog = ref(false);
+
+// Franja horaria de la agenda: 7:00 a.m. a 8:00 p.m. — limita el selector
+// de hora en "Nueva cita"/"Editar cita" y sirve de tope para no tener que
+// generar la lista de horas ocupadas fuera de ese rango.
+const horaMinimaAgenda = (() => {
+    const fecha = new Date();
+    fecha.setHours(7, 0, 0, 0);
+    return fecha;
+})();
+const horaMaximaAgenda = (() => {
+    const fecha = new Date();
+    fecha.setHours(20, 0, 0, 0);
+    return fecha;
+})();
+
+const formatearHora12 = (horaStr) => {
+    if (!horaStr) return '';
+
+    const [horas, minutos] = horaStr.split(':').map(Number);
+    const periodo = horas >= 12 ? 'p. m.' : 'a. m.';
+    const horas12 = horas % 12 === 0 ? 12 : horas % 12;
+    return `${horas12}:${String(minutos).padStart(2, '0')} ${periodo}`;
+};
+
+// Aviso, no bloqueo: el médico puede querer superponer citas a propósito
+// (ver conversación con Howard), así que esto solo ayuda a no pisarlas por
+// error, no impide guardar. excluirId es para no contar la propia cita
+// como "ocupada" cuando se está editando ella misma.
+const horasOcupadas = (excluirId = null) =>
+    citasHoy.value
+        .filter((c) => c.id !== excluirId)
+        .map((c) => c.hora)
+        .sort()
+        .map(formatearHora12);
 
 const citaVacia = {
     hora: null,
@@ -87,6 +121,35 @@ const cargarCitasHoy = async () => {
     citasHoy.value = await funListarCitas({ fecha: hoyStr, estado: 'pendiente' });
 };
 
+// Refresco automático cada 60s mientras el Dashboard está abierto: si el
+// médico marca "Atendido" en su sesión, o la secretaria crea/corrige una
+// cita en la suya, la otra persona lo ve solo sin tener que recargar la
+// página a mano. Se pausa cuando la pestaña no está visible (cambio de
+// pestaña, minimizado) para no gastar requests de más cuando nadie está
+// mirando, y se corta del todo al salir del Dashboard.
+let intervaloRefrescoCitas = null;
+
+const iniciarRefrescoCitas = () => {
+    if (!puedeVerCitas || intervaloRefrescoCitas) return;
+    intervaloRefrescoCitas = setInterval(cargarCitasHoy, 60000);
+};
+
+const detenerRefrescoCitas = () => {
+    clearInterval(intervaloRefrescoCitas);
+    intervaloRefrescoCitas = null;
+};
+
+const alCambiarVisibilidadPestana = () => {
+    if (document.hidden) {
+        detenerRefrescoCitas();
+    } else {
+        // Al volver a la pestaña, refresca ya mismo en vez de esperar hasta
+        // 60s más para mostrar un cambio que puede llevar rato esperando.
+        cargarCitasHoy();
+        iniciarRefrescoCitas();
+    }
+};
+
 const marcarComoAtendida = async (citaSeleccionada) => {
     try {
         await funActualizarCita(citaSeleccionada.id, {
@@ -112,6 +175,69 @@ const nuevaCita = () => {
     cita.value = { ...citaVacia };
     pacienteInput.value = '';
     visibleCitaDialog.value = true;
+};
+
+// ============ Editar cita (corregir hora/motivo, ver AUDITORIA.md) ============
+// Antes solo el médico podía tocar una cita ya creada; ahora la secretaria
+// también, para poder arreglar un error de carga — pero "estado" no se toca
+// acá (CitaController::update se lo ignora si lo manda igual): marcar
+// atendida sigue siendo una decisión clínica del médico, ver "Atendido"
+// arriba.
+const visibleEditarCitaDialog = ref(false);
+const erroresEditarCita = ref({});
+
+const citaEditandoVacia = {
+    id: null,
+    fecha: null,
+    hora: null,
+    motivo: ''
+};
+
+const citaEditando = ref({ ...citaEditandoVacia });
+
+// citaSeleccionada.hora llega como "HH:MM:SS" (columna time de Postgres);
+// el DatePicker necesita un objeto Date para mostrarla.
+const parsearHora = (horaStr) => {
+    if (!horaStr) return null;
+
+    const [horas, minutos] = horaStr.split(':').map(Number);
+    const fecha = new Date();
+    fecha.setHours(horas, minutos, 0, 0);
+    return fecha;
+};
+
+const editarCita = (citaSeleccionada) => {
+    erroresEditarCita.value = {};
+    citaEditando.value = {
+        id: citaSeleccionada.id,
+        fecha: citaSeleccionada.fecha,
+        hora: parsearHora(citaSeleccionada.hora),
+        motivo: citaSeleccionada.motivo ?? ''
+    };
+    visibleEditarCitaDialog.value = true;
+};
+
+const guardarEdicionCita = async () => {
+    try {
+        await funActualizarCita(citaEditando.value.id, {
+            fecha: citaEditando.value.fecha,
+            hora: citaEditando.value.hora ? formatearHora(citaEditando.value.hora) : null,
+            motivo: citaEditando.value.motivo
+        });
+
+        toast.add({ severity: 'success', summary: 'Cita actualizada', detail: 'Los datos se corrigieron correctamente', life: 3000 });
+
+        visibleEditarCitaDialog.value = false;
+        await cargarCitasHoy();
+    } catch (error) {
+        console.error(error);
+
+        if (error.response?.status === 422) {
+            erroresEditarCita.value = error.response.data.errors ?? {};
+        }
+
+        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message ?? 'Ocurrió un error inesperado', life: 3000 });
+    }
 };
 
 // Búsqueda server-side (funBuscarPacientes, máx. 15 resultados) en vez de
@@ -243,9 +369,17 @@ onMounted(async () => {
         } catch (error) {
             console.error(error);
         }
+
+        document.addEventListener('visibilitychange', alCambiarVisibilidadPestana);
+        iniciarRefrescoCitas();
     }
 
     abrirNuevaCitaDesdeQuery();
+});
+
+onUnmounted(() => {
+    detenerRefrescoCitas();
+    document.removeEventListener('visibilitychange', alCambiarVisibilidadPestana);
 });
 </script>
 
@@ -309,9 +443,12 @@ onMounted(async () => {
                     <template #body="slotProps"> {{ slotProps.data.patient?.first_name }} {{ slotProps.data.patient?.last_name }} </template>
                 </Column>
                 <Column field="motivo" header="Motivo"></Column>
-                <Column v-if="usuario?.role !== 'secretaria'" header="Acciones">
+                <Column header="Acciones">
                     <template #body="slotProps">
-                        <Button icon="pi pi-check" severity="success" rounded label="Atendido" @click="marcarComoAtendida(slotProps.data)" />
+                        <div class="flex gap-2">
+                            <Button icon="pi pi-pencil" rounded @click="editarCita(slotProps.data)" />
+                            <Button v-if="usuario?.role !== 'secretaria'" icon="pi pi-check" severity="success" rounded label="Atendido" @click="marcarComoAtendida(slotProps.data)" />
+                        </div>
                     </template>
                 </Column>
                 <template #empty>No hay citas pendientes para hoy.</template>
@@ -339,10 +476,11 @@ onMounted(async () => {
                 <small v-if="errores.patient_id" class="text-red-500">{{ errores.patient_id[0] }}</small>
 
                 <FloatLabel class="w-full">
-                    <DatePicker id="hora" v-model="cita.hora" timeOnly hourFormat="12" showIcon iconDisplay="input" class="w-full" />
+                    <DatePicker id="hora" v-model="cita.hora" timeOnly hourFormat="12" showIcon iconDisplay="input" class="w-full" :minDate="horaMinimaAgenda" :maxDate="horaMaximaAgenda" />
                     <label for="hora">Hora</label>
                 </FloatLabel>
                 <small v-if="errores.hora" class="text-red-500">{{ errores.hora[0] }}</small>
+                <small v-else-if="horasOcupadas().length" class="text-surface-500">Horas ocupadas hoy: {{ horasOcupadas().join(', ') }}</small>
 
                 <FloatLabel class="w-full">
                     <Textarea id="motivo" v-model="cita.motivo" class="w-full" rows="2" autoResize />
@@ -353,6 +491,31 @@ onMounted(async () => {
             <template #footer>
                 <Button label="Cancelar" severity="secondary" @click="visibleCitaDialog = false" />
                 <Button label="Agendar" icon="pi pi-check" @click="guardarCita()" />
+            </template>
+        </Dialog>
+
+        <!-- Corregir hora/motivo de una cita ya creada (ver AUDITORIA.md) —
+        sin campo de paciente ni de estado a propósito: reasignar el paciente
+        no es "corregir un error de carga" (se cancela y se crea de nuevo), y
+        marcar atendida sigue siendo solo del médico (botón "Atendido"). -->
+        <Dialog v-model:visible="visibleEditarCitaDialog" header="Editar cita" :modal="true" :style="{ width: '450px' }" :breakpoints="{ '576px': '90vw' }">
+            <div class="flex flex-col gap-3 pt-2">
+                <FloatLabel class="w-full">
+                    <DatePicker id="editar_hora" v-model="citaEditando.hora" timeOnly hourFormat="12" showIcon iconDisplay="input" class="w-full" :minDate="horaMinimaAgenda" :maxDate="horaMaximaAgenda" />
+                    <label for="editar_hora">Hora</label>
+                </FloatLabel>
+                <small v-if="erroresEditarCita.hora" class="text-red-500">{{ erroresEditarCita.hora[0] }}</small>
+                <small v-else-if="horasOcupadas(citaEditando.id).length" class="text-surface-500">Horas ocupadas hoy: {{ horasOcupadas(citaEditando.id).join(', ') }}</small>
+
+                <FloatLabel class="w-full">
+                    <Textarea id="editar_motivo" v-model="citaEditando.motivo" class="w-full" rows="2" autoResize />
+                    <label for="editar_motivo">Síntoma</label>
+                </FloatLabel>
+            </div>
+
+            <template #footer>
+                <Button label="Cancelar" severity="secondary" @click="visibleEditarCitaDialog = false" />
+                <Button label="Guardar" icon="pi pi-check" @click="guardarEdicionCita()" />
             </template>
         </Dialog>
 

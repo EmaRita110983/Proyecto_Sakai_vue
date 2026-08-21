@@ -21,11 +21,14 @@ onMounted(() => {
 });
 
 const guardar = async () => {
-    if (password.value.length < 8) {
+    // Mismo mínimo que el backend (ver AuthController::funCambiarPassword) —
+    // si se desincroniza, el usuario ve "guardado" acá y recién se entera
+    // del rechazo real en el toast de error genérico del catch.
+    if (password.value.length < 12) {
         toast.add({
             severity: 'warn',
             summary: 'Contraseña muy corta',
-            detail: 'Debe tener al menos 8 caracteres',
+            detail: 'Debe tener al menos 12 caracteres',
             life: 3000
         });
         return;
@@ -102,7 +105,7 @@ const cerrarSesion = async () => {
 
                     <div>
                         <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Nueva contraseña</label>
-                        <Password id="password1" v-model="password" placeholder="Mínimo 8 caracteres" :toggleMask="true" class="mb-4" fluid :feedback="false"></Password>
+                        <Password id="password1" v-model="password" placeholder="Mínimo 12 caracteres" :toggleMask="true" class="mb-4" fluid :feedback="false"></Password>
 
                         <label for="password2" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Confirmar contraseña</label>
                         <Password id="password2" v-model="passwordConfirmation" placeholder="Repite la contraseña" :toggleMask="true" class="mb-8" fluid :feedback="false"></Password>
