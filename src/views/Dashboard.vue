@@ -2,8 +2,8 @@
 import { onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getUser } from '@/service/auth.service';
-import { funListarPacientes, funGuardarPaciente } from '@/service/patient.service';
-import { funListar } from '@/service/usuario.service';
+import { funBuscarPacientes, funGuardarPaciente } from '@/service/patient.service';
+import { funObtenerEstadisticas } from '@/service/usuario.service';
 import { funListarCitas, funGuardarCita, funActualizarCita } from '@/service/cita.service';
 import { useToast } from 'primevue/usetoast';
 
@@ -114,12 +114,23 @@ const nuevaCita = () => {
     visibleCitaDialog.value = true;
 };
 
-const buscarSugerenciasPacientes = (event) => {
-    const query = event.query.trim().toLowerCase();
+// Búsqueda server-side (funBuscarPacientes, máx. 15 resultados) en vez de
+// filtrar un listado completo precargado — ver PatientController::index.
+const buscarSugerenciasPacientes = async (event) => {
+    const query = event.query.trim();
 
-    sugerenciasPacientes.value = pacientes.value
-        .filter((p) => `${p.first_name} ${p.last_name}`.toLowerCase().includes(query) || (p.cedula ?? '').toLowerCase().includes(query))
-        .map((p) => ({ ...p, nombreCompleto: `${p.first_name} ${p.last_name}${p.cedula ? ' — CI ' + p.cedula : ''}` }));
+    if (!query) {
+        sugerenciasPacientes.value = [];
+        return;
+    }
+
+    try {
+        const resultados = await funBuscarPacientes(query);
+        sugerenciasPacientes.value = resultados.map((p) => ({ ...p, nombreCompleto: `${p.first_name} ${p.last_name}${p.cedula ? ' — CI ' + p.cedula : ''}` }));
+    } catch (error) {
+        console.error(error);
+        sugerenciasPacientes.value = [];
+    }
 };
 
 const crearCitaConPaciente = async (patientId) => {
@@ -216,19 +227,11 @@ const abrirNuevaCitaDesdeQuery = () => {
 watch(() => route.query.accion, abrirNuevaCitaDesdeQuery);
 
 onMounted(async () => {
-    try {
-        const listaPacientes = await funListarPacientes();
-        totalPacientes.value = listaPacientes.length;
-        pacientes.value = listaPacientes;
-    } catch (error) {
-        console.error(error);
-    }
-
     if (puedeVerUsuarios) {
         try {
-            const usuarios = await funListar();
-            totalSecretarias.value = usuarios.filter((u) => u.role === 'secretaria').length;
-            totalMedicos.value = usuarios.filter((u) => u.role === 'admin').length;
+            const stats = await funObtenerEstadisticas();
+            totalSecretarias.value = stats.secretarias ?? totalSecretarias.value;
+            totalMedicos.value = stats.medicos ?? totalMedicos.value;
         } catch (error) {
             console.error(error);
         }
@@ -328,7 +331,7 @@ onMounted(async () => {
             <div class="flex flex-col gap-3 pt-2">
                 <div class="flex items-center gap-2">
                     <FloatLabel class="w-full">
-                        <AutoComplete id="patient_id" v-model="pacienteInput" :suggestions="sugerenciasPacientes" optionLabel="nombreCompleto" dropdown class="w-full" inputClass="w-full" @complete="buscarSugerenciasPacientes" />
+                        <AutoComplete id="patient_id" v-model="pacienteInput" :suggestions="sugerenciasPacientes" optionLabel="nombreCompleto" :delay="300" dropdown class="w-full" inputClass="w-full" @complete="buscarSugerenciasPacientes" />
                         <label for="patient_id">Paciente</label>
                     </FloatLabel>
                     <i class="pi pi-info-circle text-surface-500" v-tooltip.top="'Si el paciente no aparece en las sugerencias, se registrará como nuevo (escribe nombre y apellido).'"></i>

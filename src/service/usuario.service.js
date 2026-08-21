@@ -6,6 +6,15 @@ export async function funListar() {
     return response.data;
 }
 
+// Conteos livianos para los tiles del Dashboard (médicos para superadmin,
+// secretarias para admin) — a diferencia de funListar(), no trae el
+// listado completo de usuarios solo para contarlos en el navegador.
+export async function funObtenerEstadisticas() {
+    const response = await api.get('/v1/users/stats/conteo');
+
+    return response.data;
+}
+
 export async function funGuardar(usuario) {
     const response = await api.post('/v1/users', usuario);
 

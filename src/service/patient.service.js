@@ -6,6 +6,17 @@ export async function funListarPacientes() {
     return response.data;
 }
 
+// Búsqueda acotada (máx. 15) por nombre/cédula, para autocompletes como el
+// de "Nueva cita" en el Dashboard — a diferencia de funListarPacientes(),
+// no trae el listado completo del tenant.
+export async function funBuscarPacientes(q) {
+    const response = await api.get('/v1/patients', {
+        params: { q }
+    });
+
+    return response.data;
+}
+
 export async function funObtenerPaciente(id) {
     const response = await api.get(`/v1/patients/${id}`);
 
