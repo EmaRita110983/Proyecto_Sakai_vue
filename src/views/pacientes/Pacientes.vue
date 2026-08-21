@@ -36,6 +36,14 @@ const puedeVerHistorial = ['admin', 'superadmin'].includes(getUser()?.role);
 
 const pacientes = ref([]);
 
+// ============ Paginación server-side (ver AUDITORIA.md, "Ningún listado
+// pagina"): antes se traía el tenant completo y PrimeVue paginaba/filtraba
+// del lado del navegador. Ahora cada página se pide al backend. ============
+const filasPorPagina = ref(10);
+const paginaActual = ref(0); // 0-indexed, como el evento @page de PrimeVue
+const totalPacientes = ref(0);
+const cargando = ref(false);
+
 const pacienteVacio = {
     first_name: '',
     last_name: '',
@@ -60,27 +68,64 @@ const filters = ref({
     }
 });
 
+// Trae la página actual del backend, aplicando el término de búsqueda (si
+// hay) como filtro server-side — reemplaza el filtro client-side que tenía
+// PrimeVue antes (ya no tiene sentido: solo llega una página a la vez).
+const cargarPacientes = async () => {
+    cargando.value = true;
+
+    try {
+        const termino = (filters.value.global.value || '').trim();
+
+        const respuesta = await funListarPacientes({
+            page: paginaActual.value + 1,
+            per_page: filasPorPagina.value,
+            ...(termino ? { q: termino } : {})
+        });
+
+        pacientes.value = respuesta.data;
+        totalPacientes.value = respuesta.total;
+    } catch (error) {
+        console.error(error);
+    } finally {
+        cargando.value = false;
+    }
+};
+
+const onPage = (event) => {
+    paginaActual.value = event.page;
+    filasPorPagina.value = event.rows;
+    cargarPacientes();
+};
+
 // Ver usePacientesFilter.js: un clic en "Pacientes" del sidebar mientras ya
 // se está en esta pantalla no navega (Vue Router no dispara nada al ser la
 // misma ruta), así que esta señal es la única forma de enterarse de que hay
-// que limpiar el filtro y volver a mostrar todos los pacientes.
+// que limpiar el filtro y volver a mostrar todos los pacientes. Solo limpia
+// el valor: el watch de abajo reacciona y recarga.
 watch(pacientesFilterResetSignal, () => {
     filters.value.global.value = null;
 });
 
 // ============ Buscar paciente eliminado (soft delete) ============
-// El filtro de arriba solo busca entre los pacientes activos (los eliminados
-// no vienen en `pacientes`). Si no hay ningún activo que coincida, se
-// consulta al backend por si la cédula/pasaporte pertenece a un paciente
-// eliminado, para poder consultarlo (de solo lectura, no se reactiva acá).
+// La búsqueda por cédula/pasaporte ahora es server-side (ver cargarPacientes
+// arriba, dispara con debounce al tipear). Si no da ningún resultado activo,
+// se consulta al backend por si pertenece a un paciente eliminado, para
+// poder consultarlo de solo lectura (no se reactiva acá).
 const pacienteEliminadoEncontrado = ref(null);
 
 const pacientesVisibles = computed(() => (pacienteEliminadoEncontrado.value ? [...pacientes.value, pacienteEliminadoEncontrado.value] : pacientes.value));
+
+let debounceBusqueda = null;
 
 watch(
     () => filters.value.global.value,
     () => {
         pacienteEliminadoEncontrado.value = null;
+        paginaActual.value = 0;
+
+        clearTimeout(debounceBusqueda);
+        debounceBusqueda = setTimeout(cargarPacientes, 350);
     }
 );
 
@@ -91,9 +136,12 @@ const buscarPaciente = async () => {
         return;
     }
 
-    const hayActivoCoincidente = pacientes.value.some((p) => p.cedula === termino || p.pasaporte === termino);
+    // Fuerza la búsqueda ya (sin esperar el debounce) antes de decidir si
+    // hace falta el fallback a "eliminado".
+    clearTimeout(debounceBusqueda);
+    await cargarPacientes();
 
-    if (hayActivoCoincidente) {
+    if (pacientes.value.length > 0) {
         return;
     }
 
@@ -179,7 +227,7 @@ const guardarPaciente = async () => {
 
         visibleDialog.value = false;
 
-        pacientes.value = await funListarPacientes();
+        await cargarPacientes();
 
         paciente.value = { ...pacienteVacio };
     } catch (error) {
@@ -224,7 +272,7 @@ const eliminarPaciente = (pacienteSeleccionado) => {
             try {
                 await funEliminarPaciente(pacienteSeleccionado.id);
 
-                pacientes.value = await funListarPacientes();
+                await cargarPacientes();
 
                 toast.add({
                     severity: 'success',
@@ -246,13 +294,7 @@ const eliminarPaciente = (pacienteSeleccionado) => {
     });
 };
 
-onMounted(async () => {
-    try {
-        pacientes.value = await funListarPacientes();
-    } catch (error) {
-        console.error(error);
-    }
-});
+onMounted(cargarPacientes);
 </script>
 
 <template>
@@ -280,7 +322,7 @@ onMounted(async () => {
             <Button icon="pi pi-arrow-right" class="ml-2" @click="buscarPaciente()" />
         </div>
 
-        <DataTable :value="pacientesVisibles" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula', 'pasaporte']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll" size="small">
+        <DataTable :value="pacientesVisibles" lazy paginator :rows="filasPorPagina" :totalRecords="totalPacientes" :first="paginaActual * filasPorPagina" :loading="cargando" @page="onPage" stripedRows showGridlines responsiveLayout="scroll" size="small">
             <Column field="id" header="ID"></Column>
             <Column field="first_name" header="Nombre">
                 <template #body="slotProps">

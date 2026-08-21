@@ -40,8 +40,12 @@ const usuario = ref({
 });
 
 // Médicos disponibles para asignar como tenant de una nueva secretaria
-// (solo el superadmin necesita elegir esto; el admin siempre crea para sí mismo).
-const medicos = computed(() => usuarios.value.filter((u) => u.role === 'admin').map((u) => ({ name: u.name, value: u.id })));
+// (solo el superadmin necesita elegir esto; el admin siempre crea para sí
+// mismo). Fetch propio, sin paginar (ver onMounted): independiente de la
+// tabla paginada de abajo, para que el selector no quede acotado a los
+// médicos que caben en la página visible.
+const medicosDisponibles = ref([]);
+const medicos = computed(() => medicosDisponibles.value.map((u) => ({ name: u.name, value: u.id })));
 
 const mostrarSelectorMedico = computed(() => !editando.value && esSuperAdmin && usuario.value.role === 'secretaria');
 
@@ -59,27 +63,72 @@ const filters = ref({
     }
 });
 
+// ============ Paginación server-side (ver AUDITORIA.md, "Ningún listado
+// pagina"): antes se traía el tenant completo y PrimeVue paginaba/filtraba
+// del lado del navegador. Ahora cada página se pide al backend. ============
+const filasPorPagina = ref(10);
+const paginaActual = ref(0); // 0-indexed, como el evento @page de PrimeVue
+const totalUsuarios = ref(0);
+const cargandoUsuarios = ref(false);
+
+// Trae la página actual del backend, aplicando el término de búsqueda (si
+// hay) como filtro server-side — reemplaza el filtro client-side que tenía
+// PrimeVue antes (ya no tiene sentido: solo llega una página a la vez).
+const cargarUsuarios = async () => {
+    cargandoUsuarios.value = true;
+
+    try {
+        const termino = (filters.value.global.value || '').trim();
+
+        const respuesta = await funListar({
+            page: paginaActual.value + 1,
+            per_page: filasPorPagina.value,
+            ...(termino ? { q: termino } : {})
+        });
+
+        usuarios.value = respuesta.data;
+        totalUsuarios.value = respuesta.total;
+    } catch (error) {
+        console.error(error);
+    } finally {
+        cargandoUsuarios.value = false;
+    }
+};
+
+const onPageUsuarios = (event) => {
+    paginaActual.value = event.page;
+    filasPorPagina.value = event.rows;
+    cargarUsuarios();
+};
+
 // Ver useUsuariosFilter.js: un clic en "Usuarios"/"Secretaria" del sidebar
 // mientras ya se está en esta pantalla no navega (Vue Router no dispara nada
 // al ser la misma ruta), así que esta señal es la única forma de enterarse
 // de que hay que limpiar el filtro y volver a mostrar todos los usuarios.
+// Solo limpia el valor: el watch de abajo reacciona y recarga.
 watch(usuariosFilterResetSignal, () => {
     filters.value.global.value = null;
 });
 
 // ============ Buscar usuario eliminado (soft delete) ============
-// El filtro de arriba solo busca entre los usuarios activos (los eliminados
-// no vienen en `usuarios`). Si no hay ninguno activo que coincida, se
-// consulta al backend por si la cédula pertenece a una secretaria/médico
-// eliminado, para poder consultarlo (de solo lectura, no se reactiva acá).
+// La búsqueda por cédula ahora es server-side (ver cargarUsuarios arriba,
+// dispara con debounce al tipear). Si no da ningún resultado activo, se
+// consulta al backend por si pertenece a una secretaria/médico eliminado,
+// para poder consultarlo de solo lectura (no se reactiva acá).
 const usuarioEliminadoEncontrado = ref(null);
 
 const usuariosVisibles = computed(() => (usuarioEliminadoEncontrado.value ? [...usuarios.value, usuarioEliminadoEncontrado.value] : usuarios.value));
+
+let debounceBusquedaUsuarios = null;
 
 watch(
     () => filters.value.global.value,
     () => {
         usuarioEliminadoEncontrado.value = null;
+        paginaActual.value = 0;
+
+        clearTimeout(debounceBusquedaUsuarios);
+        debounceBusquedaUsuarios = setTimeout(cargarUsuarios, 350);
     }
 );
 
@@ -90,9 +139,12 @@ const buscarUsuario = async () => {
         return;
     }
 
-    const hayActivoCoincidente = usuarios.value.some((u) => u.cedula === termino);
+    // Fuerza la búsqueda ya (sin esperar el debounce) antes de decidir si
+    // hace falta el fallback a "eliminado".
+    clearTimeout(debounceBusquedaUsuarios);
+    await cargarUsuarios();
 
-    if (hayActivoCoincidente) {
+    if (usuarios.value.length > 0) {
         return;
     }
 
@@ -132,7 +184,7 @@ const actualizarUsuario = async () => {
 
         visibleDialog.value = false;
 
-        usuarios.value = await funListar();
+        await cargarUsuarios();
 
         usuario.value = {
             id: null,
@@ -162,7 +214,7 @@ const desactivarUsuario = (usuario) => {
             try {
                 await funCambiarEstado(usuario.id);
 
-                usuarios.value = await funListar();
+                await cargarUsuarios();
 
                 toast.add({
                     severity: 'success',
@@ -194,7 +246,7 @@ const eliminarUsuario = (usuario) => {
             try {
                 await funEliminar(usuario.id);
 
-                usuarios.value = await funListar();
+                await cargarUsuarios();
 
                 toast.add({
                     severity: 'success',
@@ -232,7 +284,7 @@ const reactivarUsuario = (usuarioEliminado) => {
 
                 usuarioEliminadoEncontrado.value = null;
                 filters.value.global.value = null;
-                usuarios.value = await funListar();
+                await cargarUsuarios();
 
                 toast.add({
                     severity: 'success',
@@ -469,7 +521,7 @@ const activarUsuario = async (usuario) => {
     try {
         await funCambiarEstado(usuario.id);
 
-        usuarios.value = await funListar();
+        await cargarUsuarios();
 
         toast.add({
             severity: 'success',
@@ -540,7 +592,7 @@ const guardarUsuario = async () => {
             credencialesDialogVisible.value = true;
         }
 
-        usuarios.value = await funListar();
+        await cargarUsuarios();
 
         usuario.value = {
             id: null,
@@ -602,10 +654,14 @@ const roles = ref(
 );
 
 onMounted(async () => {
-    try {
-        usuarios.value = await funListar();
-    } catch (error) {
-        console.error(error);
+    await cargarUsuarios();
+
+    if (esSuperAdmin) {
+        try {
+            medicosDisponibles.value = await funListar({ role: 'admin' });
+        } catch (error) {
+            console.error(error);
+        }
     }
 });
 </script>
@@ -635,7 +691,7 @@ onMounted(async () => {
             <Button icon="pi pi-arrow-right" class="ml-2" @click="buscarUsuario()" />
         </div>
 
-        <DataTable :value="usuariosVisibles" v-model:filters="filters" filterDisplay="menu" :globalFilterFields="['cedula']" paginator :rows="10" stripedRows showGridlines responsiveLayout="scroll" size="small">
+        <DataTable :value="usuariosVisibles" lazy paginator :rows="filasPorPagina" :totalRecords="totalUsuarios" :first="paginaActual * filasPorPagina" :loading="cargandoUsuarios" @page="onPageUsuarios" stripedRows showGridlines responsiveLayout="scroll" size="small">
             <Column field="id" header="ID"></Column>
             <Column field="name" header="Nombre"></Column>
             <Column field="email" header="Email"></Column>

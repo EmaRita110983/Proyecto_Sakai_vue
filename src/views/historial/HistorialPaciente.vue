@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { funObtenerPaciente, funListarPacientes, funBuscarPacienteEliminado } from '@/service/patient.service';
+import { funObtenerPaciente, funBuscarPacientes, funBuscarPacienteEliminado } from '@/service/patient.service';
 import { funListarHistorial, funGuardarHistorial, funActualizarHistorial, funEliminarHistorial } from '@/service/historial.service';
 import { funListarRecetas, funGuardarReceta, funActualizarReceta, funEliminarReceta } from '@/service/receta.service';
 import { funListarAutorizaciones, funGuardarAutorizacion, funActualizarAutorizacion, funEliminarAutorizacion } from '@/service/autorizacion.service';
@@ -70,8 +70,11 @@ const buscarPorCedula = async () => {
 
     try {
         const valor = busquedaCedula.value.trim();
-        const pacientes = await funListarPacientes();
-        let encontrado = pacientes.find((p) => p.cedula === valor || p.pasaporte === valor);
+        // Búsqueda server-side (máx. 15 candidatos por coincidencia parcial,
+        // ver PatientController::index) en vez de traer el tenant completo
+        // solo para encontrar uno por cédula/pasaporte exacta.
+        const candidatos = await funBuscarPacientes(valor);
+        let encontrado = candidatos.find((p) => p.cedula === valor || p.pasaporte === valor);
 
         // No está entre los activos: puede ser un paciente eliminado (soft
         // delete). Se consulta aparte para poder verlo de solo lectura.

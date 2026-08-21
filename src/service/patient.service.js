@@ -1,7 +1,12 @@
 import api from './api';
 
-export async function funListarPacientes() {
-    const response = await api.get('/v1/patients');
+// Sin argumentos, exactamente el comportamiento de siempre (array completo
+// del tenant). Con { page, per_page, q }, pagina de verdad en el backend
+// (ver PatientController::index) — usado por Pacientes.vue, que antes
+// traía el tenant completo y paginaba del lado del navegador (ver
+// AUDITORIA.md, "Ningún listado pagina").
+export async function funListarPacientes(params = {}) {
+    const response = await api.get('/v1/patients', { params });
 
     return response.data;
 }

@@ -1,7 +1,12 @@
 import api from './api';
 
-export async function funListar() {
-    const response = await api.get('/v1/users');
+// Sin argumentos, exactamente el comportamiento de siempre (array completo
+// del tenant). Con { page, per_page, q }, pagina de verdad en el backend
+// (ver UserController::index) — usado por Usuarios.vue. Con { role },
+// lista liviana sin paginar (usada para el selector de médico al crear una
+// secretaria, independiente de la página visible de la tabla).
+export async function funListar(params = {}) {
+    const response = await api.get('/v1/users', { params });
 
     return response.data;
 }
