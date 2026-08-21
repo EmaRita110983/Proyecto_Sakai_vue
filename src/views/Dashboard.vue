@@ -297,7 +297,7 @@ onMounted(async () => {
         <div v-if="puedeVerCitas" class="card mb-4">
             <div class="flex justify-between items-center mb-3">
                 <h3 class="m-0 font-display" style="font-size: 1.05rem">Citas pendientes de hoy</h3>
-                <Button label="Nueva cita" icon="pi pi-calendar-plus" @click="nuevaCita()" />
+                <Button class="btn-nueva-cita" label="Nueva cita" icon="pi pi-calendar-plus" @click="nuevaCita()" />
             </div>
 
             <DataTable :value="citasHoy" stripedRows showGridlines size="small">
@@ -318,7 +318,7 @@ onMounted(async () => {
         <div v-if="usuario?.role !== 'secretaria'" class="card">
             <h3 class="mt-0 mb-3 font-display" style="font-size: 1.05rem">Accesos rápidos</h3>
             <div class="flex flex-wrap gap-2">
-                <Button v-if="usuario?.role === 'admin'" label="Ver pacientes" icon="pi pi-id-card" @click="router.push('/pacientes')" />
+                <Button v-if="usuario?.role === 'admin'" label="Ver pacientes" icon="pi pi-id-card" severity="secondary" @click="router.push('/pacientes')" />
                 <Button v-if="usuario?.role === 'admin'" label="Historial clínico" icon="pi pi-book" severity="secondary" @click="router.push('/historial')" />
                 <Button v-if="usuario?.role === 'superadmin'" label="Ver usuarios" icon="pi pi-users" severity="secondary" @click="router.push('/usuarios')" />
             </div>
@@ -456,3 +456,15 @@ onMounted(async () => {
         </Dialog>
     </div>
 </template>
+
+<style scoped>
+/* "Nueva cita" es sólido con el color de marca a propósito, igual que el
+   resto de botones "Nueva..." de la app (ver CLAUDE.md) — el hover
+   compartido de _tokens.scss pone el mismo --primary-color de fondo que ya
+   tiene en reposo, así que ahí no se nota nada. Se oscurece con un filter
+   en vez de cambiar el color base, para no romper esa convención ni
+   depender del hex real de --primary-color (que varía por médico). */
+.btn-nueva-cita:hover {
+    filter: brightness(0.88);
+}
+</style>

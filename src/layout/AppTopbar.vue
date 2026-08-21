@@ -46,7 +46,7 @@ const logout = async () => {
             </button>
             <router-link v-if="branding.logo_url" to="/" class="layout-topbar-logo">
                 <img :src="branding.logo_url" :alt="branding.brand_name || 'Logo'" style="height: 2rem; width: auto" />
-                <span>{{ branding.brand_name || 'Clinia' }}</span>
+                <span>{{ branding.brand_name || 'Clinia Doctor' }}</span>
             </router-link>
 
             <router-link v-else to="/" class="layout-topbar-logo">
@@ -55,7 +55,7 @@ const logout = async () => {
                     <path d="M 81 43 L 88 50 L 81 57 L 74 50 Z" fill="var(--brass)" />
                 </svg>
 
-                <span>{{ branding.brand_name || 'Clinia' }}</span>
+                <span>{{ branding.brand_name || 'Clinia Doctor' }}</span>
             </router-link>
         </div>
 

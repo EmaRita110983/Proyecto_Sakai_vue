@@ -18,7 +18,7 @@ const router = useRouter();
 
 // Antes de iniciar sesión no hay tenant ni color propio que aplicar (eso lo
 // hace useBranding ya autenticado, ver AppTopbar.vue): el login usa el
-// bronce fijo de Clinia como color "primario" mientras tanto, con el mismo
+// bronce fijo de Clinia Doctor como color "primario" mientras tanto, con el mismo
 // mecanismo (palette + updatePrimaryPalette) que ya usa el resto de la app
 // para pintar Button/Checkbox/enlaces con la paleta completa (no solo un
 // tono), así se ve bien también en modo oscuro. A propósito no hay selector
@@ -66,7 +66,7 @@ const login = async () => {
                             <path d="M 77.85 69.5 A 34 34 0 1 1 77.85 30.5" fill="none" stroke="var(--brass)" stroke-width="11" stroke-linecap="round" />
                             <path d="M 81 43 L 88 50 L 81 57 L 74 50 Z" fill="var(--brass)" />
                         </svg>
-                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4 font-display">Bienvenido a Clinia</div>
+                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4 font-display">Bienvenido a Clinia Doctor</div>
                         <span class="text-muted-color font-medium">Inicia sesión para continuar</span>
                     </div>
 
