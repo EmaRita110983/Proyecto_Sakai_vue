@@ -1,0 +1,318 @@
+// Tokens propios de la propuesta visual (ver artifact de referencia).
+// El color de acento sigue siendo el branding por médico (--p-primary-*,
+// ya dinámico vía updatePrimaryPalette); esto solo cubre los neutros,
+// el bronce y los colores de estado, integrados con el modo oscuro
+// existente (clase .app-dark en :root, ver layout.js).
+
+:root {
+    --paper: #f1f4f1;
+    --surface-2: #f7faf8;
+    --ink-muted: #5c6c64;
+    --ink-faint: #8b9c93;
+    --line: #dee6e0;
+    --line-strong: #c7d3cc;
+
+    --brass: #b9863b;
+    --brass-soft: #f3e7d4;
+    --good: #2f8f5b;
+    --good-soft: #e4f3ea;
+    --warn: #b8791e;
+    --warn-soft: #fbeedd;
+    --critical: #b0432e;
+    --critical-soft: #fbe7e2;
+
+    --font-display: 'Manrope', -apple-system, 'Segoe UI', sans-serif;
+    --font-body: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+// El fondo de página (--surface-ground) se repunta en variables/_light.scss
+// y _dark.scss, que se cargan después de este archivo y por eso son las que
+// deben ganar la cascada (ver bug: si se declara aquí, esos dos archivos lo
+// pisan de vuelta al gris genérico de Aura).
+
+// PrimeVue inyecta el tema en tiempo de ejecución después de este CSS, así
+// que para ganarle la cascada al color de borde del preset hace falta
+// !important (una sola vez, aquí).
+:root {
+    --p-content-border-color: var(--line) !important;
+}
+
+:root[class*='app-dark'] {
+    --paper: #0e1512;
+    --surface-2: #1b2822;
+    --ink-muted: #9fb3a9;
+    --ink-faint: #63776e;
+    --line: #263630;
+    --line-strong: #34473f;
+
+    --brass: #d9a756;
+    --brass-soft: #2e2416;
+    --good: #4fae71;
+    --good-soft: #163524;
+    --warn: #d99a3e;
+    --warn-soft: #2e2414;
+    --critical: #d9695a;
+    --critical-soft: #301b17;
+}
+
+// ---------- Utilidades ----------
+
+.font-display {
+    font-family: var(--font-display);
+    font-weight: 700;
+}
+
+.text-tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-tile {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-radius: var(--content-border-radius);
+    transition:
+        background-color var(--element-transition-duration),
+        color var(--element-transition-duration);
+
+    &:hover {
+        background-color: var(--primary-color);
+        color: #ffffff;
+
+        .stat-label,
+        .stat-num {
+            color: #ffffff;
+        }
+
+        .stat-icon {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+        }
+    }
+}
+
+.stat-icon {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--p-primary-100);
+    color: var(--p-primary-600);
+    flex: none;
+
+    i {
+        font-size: 1.15rem;
+    }
+}
+
+.stat-label {
+    display: block;
+    color: var(--ink-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.stat-num {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: 1.8rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    color: var(--text-color);
+}
+
+.patient-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.15rem;
+    background: var(--p-primary-50);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--content-border-radius);
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+
+    .who {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .initials {
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: 0.65rem;
+        background: var(--surface-card);
+        color: var(--p-primary-600);
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--surface-border);
+        flex: none;
+    }
+
+    // El fondo de esta tarjeta (--p-primary-50) es siempre un tinte claro,
+    // en modo claro y oscuro por igual (los tonos numerados de PrimeVue no
+    // se invierten con el tema, solo cambia cuál tono se usa como color
+    // "primario"). Por eso el texto de acá no puede usar los tokens de texto
+    // normales (--ink-muted, --text-color heredado): esos sí se invierten
+    // en modo oscuro y quedan claros sobre un fondo que sigue siendo claro,
+    // casi invisibles. Se fija a los tonos oscuros de la paleta primaria,
+    // que se mantienen legibles sobre este fondo en los dos modos.
+    h3 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-size: 1.02rem;
+        color: var(--p-primary-900);
+    }
+
+    p {
+        margin: 2px 0 0;
+        font-size: 0.8rem;
+        color: var(--p-primary-700);
+        font-family: var(--font-mono);
+    }
+
+    .meta {
+        display: flex;
+        gap: 1.5rem;
+
+        div {
+            text-align: right;
+        }
+
+        span {
+            display: block;
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--p-primary-700);
+        }
+
+        b {
+            font-family: var(--font-mono);
+            font-weight: 400;
+            font-size: 0.92rem;
+            color: var(--p-primary-900);
+        }
+    }
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 9px 3px 7px;
+    border-radius: 999px;
+    line-height: 1.6;
+
+    &::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+    }
+
+    &.pill-good {
+        background: var(--good-soft);
+        color: var(--good);
+    }
+
+    &.pill-critical {
+        background: var(--critical-soft);
+        color: var(--critical);
+    }
+
+    &.pill-neutral {
+        background: var(--surface-2);
+        color: var(--ink-muted);
+        border: 1px solid var(--line-strong);
+
+        &::before {
+            display: none;
+        }
+    }
+}
+
+// Con table-layout: fixed (usado en varias tablas para alinear la columna
+// Acciones entre secciones), una palabra larga sin espacios no puede
+// partirse por defecto y se desborda por encima de la columna vecina en
+// vez de ajustarse dentro de la suya — se ve como "letras solapadas". Esto
+// obliga a que el texto siempre se parta dentro de su propia celda.
+//
+// Acotado a `.table-fixed-layout` (solo las tablas con table-layout: fixed,
+// ver HistorialPaciente.vue) a propósito: aplicado a TODAS las tablas
+// (como estaba antes) rompía las de table-layout: auto (Pacientes, Usuarios,
+// Dashboard) en pantallas angostas — al permitir partir cualquier palabra,
+// el layout automático encogía cada columna letra por letra en vez de
+// activar el scroll horizontal propio de `.p-datatable-table-container`.
+.table-fixed-layout :is(th, td) {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+// `.p-datatable-table-container` de PrimeVue NO tiene overflow-x: auto por
+// defecto (solo cuando el DataTable usa la prop `scrollable`, que no es el
+// caso de las tablas de este proyecto). Sin esto, una tabla con
+// table-layout: fixed + width: 100% (ver HistorialPaciente.vue) nunca se
+// desborda: en vez de eso encoge cada columna al ancho que sea, aunque el
+// texto quede ilegible en pantallas angostas — es lo que se veía como
+// "no responsive" en el historial clínico. Envolver la tabla en un
+// `.table-responsive` (con un `min-width` en `tableStyle` mayor al de la
+// pantalla) hace que el excedente se desborde y aparezca scroll horizontal
+// propio de esta caja, en vez de que las columnas se aplasten.
+.table-responsive {
+    overflow-x: auto;
+}
+
+// Hover unificado con el color de acento (el mismo --primary-color del
+// borde del sidebar): fondo de marca y texto blanco para contraste, en
+// botones (solo los "de marca": primario y secundario, no success/danger/
+// warn que son señales de estado fijas, ver convención de botones de
+// tabla más arriba), tarjetas KPI y filas de tabla. PrimeVue inyecta su
+// tema después de este CSS (misma razón que --p-content-border-color más
+// arriba), así que hace falta !important para ganarle la cascada a los
+// estados :hover que trae cada preset. Incluye también los botones
+// "outlined" sin severidad (ej. los íconos de llave/paleta en Usuarios,
+// "Nueva consulta"/"Nueva receta", etc.) — antes quedaban excluidos y su
+// hover no reflejaba el color elegido en la paleta.
+.p-button:not(.p-button-success):not(.p-button-danger):not(.p-button-warn):not(.p-button-info):not(.p-button-help):not(.p-button-contrast):not(.p-button-text):not(.p-button-link):hover {
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: #ffffff !important;
+}
+
+.p-datatable-tbody > tr:hover {
+    background: var(--primary-color) !important;
+
+    > td {
+        color: #ffffff !important;
+    }
+}
+
+// El preset de PrimeVue sube la label de un FloatLabel lleno/enfocado a
+// top: -1.25rem respecto de su propio contenedor (position: relative), es
+// decir, la label queda flotando 1.25rem POR ENCIMA del borde del campo.
+// Los formularios del proyecto (Pacientes, Usuarios, Dashboard, Historial)
+// apilan varios FloatLabel con gap-2/gap-3/gap-4 (0.5–1rem) entre filas, que
+// es menos separación de la que la label necesita para flotar sin pisar el
+// campo de arriba — se veía como "letras solapadas" entre un campo y la
+// label del siguiente. Este margen reserva ese espacio siempre, sin
+// depender de que cada dialog use el gap exacto correcto (y sin que un
+// dialog nuevo repita el mismo bug si no lo sabe).
+.p-floatlabel {
+    margin-top: 1.35rem;
+}
